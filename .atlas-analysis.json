@@ -1,0 +1,133 @@
+{
+  "projectType": "ai-ml",
+  "projectName": "Hardware-Aware Neural Networks from Scratch",
+  "projectDescription": "NumPy-based neural network implementation for hardware-constrained experiments and system-level trade-off analysis.",
+  "theme": "aspen",
+  "primaryColor": "#4F46E5",
+  "lightColor": "#818CF8",
+  "darkColor": "#3730A3",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/architecture",
+              "concepts/hardware-constraints",
+              "concepts/precision-modes",
+              "concepts/reproducibility"
+            ]
+          },
+          {
+            "group": "Training & Experiments",
+            "pages": [
+              "training/experiments",
+              "training/dataset-configuration",
+              "training/checkpointing"
+            ]
+          },
+          {
+            "group": "Analysis & Profiling",
+            "pages": [
+              "analysis/benchmarking",
+              "analysis/profiling",
+              "analysis/hardware-simulation",
+              "analysis/statistical-analysis"
+            ]
+          },
+          {
+            "group": "Deployment",
+            "pages": [
+              "deployment/inference",
+              "deployment/onnx-export",
+              "deployment/pytorch-comparison"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core Components",
+            "pages": [
+              "api/model",
+              "api/layers",
+              "api/activations",
+              "api/loss"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "api/config",
+              "api/dataset-config"
+            ]
+          },
+          {
+            "group": "Training & Evaluation",
+            "pages": [
+              "api/train",
+              "api/inference",
+              "api/benchmark"
+            ]
+          },
+          {
+            "group": "Analysis Tools",
+            "pages": [
+              "api/profiler",
+              "api/hardware-simulation",
+              "api/experiment-manager",
+              "api/statistical-analysis"
+            ]
+          },
+          {
+            "group": "CLI Scripts",
+            "pages": [
+              "api/cli-workflow",
+              "api/cli-verify-environment"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Pure NumPy implementation for transparent tensor operations",
+    "Hardware constraint simulation (memory, latency, precision)",
+    "Multi-precision support (float32, float16, int8)",
+    "Comprehensive benchmarking and profiling tools",
+    "Experiment tracking and reproducibility guarantees",
+    "Statistical analysis with multiple runs",
+    "ONNX export and PyTorch comparison",
+    "Synthetic and real dataset support (Fashion-MNIST)"
+  ],
+  "publicApiSurface": [
+    "NeuralNetworkModel",
+    "NeuralNetwork",
+    "DenseLayer",
+    "PrecisionConfig",
+    "HardwareSimulationConfig",
+    "ExperimentManager",
+    "train.run_experiment",
+    "benchmark.run_benchmark",
+    "profiler.profile_model",
+    "hardware_simulation.estimate_parameter_memory_mb",
+    "hardware_simulation.estimate_activation_memory_mb",
+    "statistical_analysis.aggregate_runs",
+    "deployment.export_to_onnx",
+    "compare.compare_with_pytorch",
+    "scripts/run_workflow.py",
+    "scripts/verify_environment.py"
+  ]
+}
