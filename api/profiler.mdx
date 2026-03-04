@@ -1,0 +1,117 @@
+---
+title: "Profiler"
+description: "Profile neural network architectures for parameter counts, memory footprint, and activation memory"
+---
+
+## Overview
+
+The profiler module provides tools to analyze neural network models and generate detailed reports about their computational and memory requirements.
+
+## profile_model
+
+Profiles a neural network model and generates a comprehensive report.
+
+### Parameters
+
+<ParamField path="model" type="object" required>
+  The neural network model to profile. Must have a `layer_sizes` attribute.
+</ParamField>
+
+<ParamField path="batch_size" type="int" default="1">
+  Batch size for activation memory estimation.
+</ParamField>
+
+<ParamField path="output_dir" type="str" default="profiling">
+  Directory where the profiling report JSON file will be saved.
+</ParamField>
+
+### Returns
+
+Returns a tuple containing:
+- `report` (dict): Profiling report with the following structure:
+  - `timestamp`: ISO 8601 timestamp
+  - `model`: Model class name
+  - `layer_sizes`: List of layer dimensions
+  - `batch_size`: Batch size used
+  - `total_trainable_parameters`: Total parameter count
+  - `layer_wise_parameters`: List of per-layer parameter details
+  - `parameter_memory_mb`: Memory footprint for float32, float16, and int8
+  - `activation_memory`: Activation memory details in bytes and MB
+- `report_file` (Path): Path to the saved JSON report
+
+### Example
+
+```python
+from profiler import profile_model
+from student import NeuralNetwork
+
+model = NeuralNetwork(
+    layer_sizes=[784, 128, 64, 10],
+    activations=['relu', 'relu', 'softmax']
+)
+
+report, output_file = profile_model(
+    model=model,
+    batch_size=32,
+    output_dir='profiling'
+)
+
+print(f"Total parameters: {report['total_trainable_parameters']}")
+print(f"Memory (float32): {report['parameter_memory_mb']['float32']} MB")
+print(f"Report saved to: {output_file}")
+```
+
+## Helper Functions
+
+### summary_table
+
+Generates a formatted text summary of a profiling report.
+
+**Parameters:**
+- `report` (dict): Profiling report from `profile_model`
+
+**Returns:** Formatted string with parameter counts and memory estimates
+
+### run_from_config
+
+Runs profiling from a configuration file.
+
+**Parameters:**
+- `config_path` (str): Path to Python configuration module
+
+**Returns:** Tuple of (report, output_file)
+
+## Configuration Format
+
+When using `run_from_config`, your config file should define:
+
+```python
+# One of the following to define the model:
+LAYER_SIZES = [784, 128, 10]
+ACTIVATIONS = ['relu', 'softmax']
+
+# Or:
+MODEL_CLASS = NeuralNetwork
+MODEL_KWARGS = {'layer_sizes': [784, 128, 10], 'activations': ['relu', 'softmax']}
+
+# Or:
+def build_model():
+    return NeuralNetwork(...)
+
+# Optional:
+PROFILE_BATCH_SIZE = 32
+PROFILE_OUTPUT_DIR = 'profiling'
+```
+
+## CLI Usage
+
+```bash
+python profiler.py --config config.py
+```
+
+## Notes
+
+- The profiler performs a forward pass to accurately measure activation memory
+- Memory estimates are provided for three precision modes: float32, float16, and int8
+- Layer-wise parameter counts help identify model bottlenecks
+- All numeric values in the JSON report are JSON-serializable (numpy types converted)

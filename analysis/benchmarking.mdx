@@ -1,0 +1,203 @@
+---
+title: Benchmarking
+description: Run comprehensive benchmarks and interpret performance results across different configurations
+---
+
+The benchmarking system measures training time, inference latency, throughput, memory usage, CPU utilization, and energy consumption across multiple model configurations.
+
+## Running Benchmarks
+
+### Basic Usage
+
+Run a full benchmark sweep:
+
+```bash
+python benchmark.py --seed 42 --output-csv benchmark_results.csv
+```
+
+### Programmatic Usage
+
+```python
+from benchmark import run_benchmarks
+
+path, results = run_benchmarks(
+    batch_sizes=[16, 32],
+    precision_modes=["float32", "float16", "int8"],
+    model_sizes=[[16, 32, 4], [16, 64, 4]],
+    n_samples=256,
+    epochs=1,
+    seed=42,
+    output_csv="benchmark_results.csv"
+)
+
+print(f"Saved {len(results)} benchmark rows to {path}")
+```
+
+## Benchmark Metrics
+
+### Training Metrics
+
+- **train_time_per_epoch_s**: Average time per training epoch in seconds
+- **final_train_accuracy**: Final training accuracy after all epochs
+- **cpu_utilization_percent**: Average CPU usage during training
+- **peak_memory_mb**: Peak memory consumption in megabytes
+
+### Inference Metrics
+
+- **inference_latency_per_sample_s**: Per-sample inference time
+- **batch_throughput_samples_per_s**: Throughput in samples per second
+
+### Resource Metrics
+
+- **energy_per_epoch_j**: Estimated energy consumption per epoch in joules
+- **peak_memory_mb**: Peak memory usage tracked with tracemalloc
+
+## Custom Benchmark Configuration
+
+```python
+from benchmark import benchmark_one_setup
+
+result = benchmark_one_setup(
+    layer_sizes=[32, 64, 10],
+    activations=["relu", "softmax"],
+    precision_mode="float16",
+    batch_size=32,
+    n_samples=512,
+    epochs=2,
+    seed=42,
+    enable_profiling=True  # Generate profiling report
+)
+
+print(f"Training time: {result['train_time_per_epoch_s']:.4f}s")
+print(f"Inference latency: {result['inference_latency_per_sample_s']:.6f}s")
+print(f"Peak memory: {result['peak_memory_mb']:.2f}MB")
+```
+
+## Interpreting Results
+
+### CSV Output Format
+
+Benchmark results are saved to `benchmarks/benchmark_results.csv` with the following columns:
+
+| Column | Description |
+|--------|-------------|
+| seed | Random seed for reproducibility |
+| layer_sizes | Model architecture (e.g., "16x32x4") |
+| precision_mode | Data type used (float32, float16, int8) |
+| batch_size | Batch size used for training |
+| epochs | Number of training epochs |
+| n_samples | Total training samples |
+| train_time_per_epoch_s | Average training time per epoch |
+| inference_latency_per_sample_s | Per-sample inference latency |
+| batch_throughput_samples_per_s | Inference throughput |
+| peak_memory_mb | Peak memory usage |
+| cpu_utilization_percent | Average CPU usage |
+| final_train_accuracy | Final training accuracy |
+| energy_per_epoch_j | Estimated energy per epoch |
+
+### Performance Analysis
+
+**Compare precision modes:**
+```python
+import pandas as pd
+
+df = pd.read_csv("benchmarks/benchmark_results.csv")
+df.groupby("precision_mode").agg({
+    "train_time_per_epoch_s": "mean",
+    "peak_memory_mb": "mean",
+    "final_train_accuracy": "mean"
+})
+```
+
+**Find optimal batch size:**
+```python
+df.groupby("batch_size").agg({
+    "batch_throughput_samples_per_s": "mean",
+    "peak_memory_mb": "mean"
+}).sort_values("batch_throughput_samples_per_s", ascending=False)
+```
+
+## Memory Measurement
+
+Benchmarking uses `tracemalloc` to track peak memory usage:
+
+```python
+import tracemalloc
+
+tracemalloc.start()
+result = model.fit(X, y, epochs=3)
+current, peak = tracemalloc.get_traced_memory()
+tracemalloc.stop()
+
+print(f"Peak memory: {peak / 1024 / 1024:.2f} MB")
+```
+
+## CPU Utilization
+
+CPU usage is sampled continuously during training using `psutil`:
+
+```python
+import psutil
+import threading
+
+process = psutil.Process()
+samples = []
+
+def sampler():
+    while not stop_flag:
+        samples.append(process.cpu_percent(interval=0.05))
+
+# Run training while sampling CPU
+worker = threading.Thread(target=sampler)
+worker.start()
+model.fit(X, y, epochs=3)
+stop_flag = True
+worker.join()
+
+avg_cpu = sum(samples) / len(samples)
+```
+
+## Energy Estimation
+
+Energy consumption is estimated based on runtime and precision mode:
+
+```python
+from energy_estimation import estimate_runtime_energy_j
+
+energy_j = estimate_runtime_energy_j(
+    runtime_seconds=time_per_epoch,
+    precision_mode="float32"
+)
+```
+
+Lower precision modes (float16, int8) typically consume less energy due to faster computation.
+
+## Enabling Profiling
+
+To generate detailed profiling reports during benchmarking:
+
+```python
+result = benchmark_one_setup(
+    layer_sizes=[32, 64, 10],
+    activations=["relu", "softmax"],
+    precision_mode="float32",
+    batch_size=32,
+    enable_profiling=True
+)
+
+if "profiling_report" in result:
+    print(f"Profiling report: {result['profiling_report']}")
+```
+
+This generates a JSON profiling report in the `profiling/` directory.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Profiling" icon="chart-line" href="/analysis/profiling">
+    Profile model parameters and memory usage
+  </Card>
+  <Card title="Statistical Analysis" icon="chart-bar" href="/analysis/statistical-analysis">
+    Run repeated benchmarks with confidence intervals
+  </Card>
+</CardGroup>

@@ -1,0 +1,170 @@
+---
+title: "config"
+description: "Core configuration objects for precision, profiling, and experiments"
+---
+
+## PrecisionConfig
+
+Dataclass for configuring precision, hardware simulation, and profiling settings.
+
+<ParamField path="train_dtype" type="str" default="float32">
+  Data type used during training (e.g., "float32")
+</ParamField>
+
+<ParamField path="infer_precision" type="str" default="float32">
+  Inference precision mode. Options: "float32", "float16", or "int8"
+</ParamField>
+
+<ParamField path="int8_clip_value" type="int" default="127">
+  Clipping threshold for int8 quantization
+</ParamField>
+
+<ParamField path="seed" type="int" default="42">
+  Random seed for reproducibility
+</ParamField>
+
+<ParamField path="enable_profiling" type="bool" default="false">
+  Enable performance profiling during training
+</ParamField>
+
+<ParamField path="enable_hardware_simulation" type="bool" default="false">
+  Enable hardware constraint simulation
+</ParamField>
+
+<ParamField path="max_memory_mb" type="float" default="512.0">
+  Maximum memory budget in megabytes for hardware simulation
+</ParamField>
+
+<ParamField path="compute_speed_factor" type="float" default="1.0">
+  Speed scaling factor for hardware simulation
+</ParamField>
+
+<ParamField path="precision_mode" type="str" default="float32">
+  Global precision mode setting
+</ParamField>
+
+<ParamField path="batch_size_limit" type="int" default="128">
+  Maximum batch size allowed
+</ParamField>
+
+## DEFAULT_CONFIG
+
+Pre-instantiated `PrecisionConfig` with default values.
+
+## EXPERIMENT_CONFIGS
+
+Dictionary of predefined experiment configurations. Each config includes dataset, model architecture, training hyperparameters, and precision settings.
+
+### baseline
+
+Standard synthetic dataset experiment:
+
+<ParamField path="dataset_version" type="str" default="synthetic-v1">
+  Dataset identifier
+</ParamField>
+
+<ParamField path="layer_sizes" type="list[int]" default="[784, 64, 10]">
+  Neural network layer dimensions
+</ParamField>
+
+<ParamField path="activations" type="list[str]" default="['relu', 'softmax']">
+  Activation functions per layer
+</ParamField>
+
+<ParamField path="epochs" type="int" default="2">
+  Number of training epochs
+</ParamField>
+
+<ParamField path="alpha" type="float" default="0.1">
+  Learning rate
+</ParamField>
+
+<ParamField path="batch_size" type="int" default="32">
+  Training batch size
+</ParamField>
+
+<ParamField path="seed" type="int" default="42">
+  Random seed
+</ParamField>
+
+<ParamField path="precision" type="str" default="float32">
+  Numerical precision mode
+</ParamField>
+
+<ParamField path="hardware_constraint_mode" type="str" default="off">
+  Hardware simulation mode ("off" or "on")
+</ParamField>
+
+<ParamField path="synthetic_mode" type="bool" default="true">
+  Use synthetic data generation
+</ParamField>
+
+<ParamField path="synthetic_samples" type="int" default="512">
+  Number of synthetic samples to generate
+</ParamField>
+
+### real_fashion_mnist
+
+Fashion-MNIST dataset experiment:
+
+<ParamField path="dataset_path" type="str">
+  Path to Fashion-MNIST training data (uses `FASHION_MNIST_SPEC.train_path`)
+</ParamField>
+
+<ParamField path="dataset_version" type="str">
+  Dataset version identifier (uses `FASHION_MNIST_SPEC.version`)
+</ParamField>
+
+<ParamField path="epochs" type="int" default="3">
+  Number of training epochs
+</ParamField>
+
+<ParamField path="synthetic_mode" type="bool" default="false">
+  Disabled for real dataset
+</ParamField>
+
+<ParamField path="dataset_min_rows" type="int" default="100">
+  Minimum required rows for validation
+</ParamField>
+
+<ParamField path="dataset_auto_prepare" type="bool" default="true">
+  Automatically download dataset if missing
+</ParamField>
+
+<ParamField path="dataset_sha256" type="str | None" default="None">
+  Optional SHA256 hash for integrity verification
+</ParamField>
+
+### synthetic_baseline
+
+Synthetic baseline without auto-preparation:
+
+<ParamField path="dataset_auto_prepare" type="bool" default="false">
+  Disabled for synthetic baseline
+</ParamField>
+
+## Profiling Constants
+
+<ParamField path="LAYER_SIZES" type="list[int]" default="[784, 64, 10]">
+  Default layer sizes for profiling
+</ParamField>
+
+<ParamField path="ACTIVATIONS" type="list[str]" default="['relu', 'softmax']">
+  Default activations for profiling
+</ParamField>
+
+<ParamField path="PROFILE_BATCH_SIZE" type="int" default="32">
+  Batch size used during profiling
+</ParamField>
+
+<ParamField path="PROFILE_OUTPUT_DIR" type="str" default="profiling">
+  Output directory for profiling results
+</ParamField>
+
+## build_model()
+
+Factory function that constructs a `NeuralNetwork` instance with default profiling configuration.
+
+**Returns:** `NeuralNetwork` configured with `LAYER_SIZES`, `ACTIVATIONS`, and `DEFAULT_CONFIG`
+
+**Source:** config.py:29

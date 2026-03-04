@@ -1,0 +1,363 @@
+---
+title: Hardware Simulation
+description: Simulate hardware constraints including memory limits, compute speed, and precision requirements
+---
+
+The hardware simulation system allows you to test model behavior under constrained hardware conditions, including limited memory, reduced compute speed, and specific precision requirements.
+
+## Configuration
+
+### HardwareSimulationConfig
+
+Define hardware constraints:
+
+```python
+from hardware_simulation import HardwareSimulationConfig
+
+config = HardwareSimulationConfig(
+    enabled=True,
+    max_memory_mb=512.0,
+    compute_speed_factor=2.0,  # 2x slower
+    precision_mode="float16",
+    batch_size_limit=128
+)
+```
+
+### Configuration Parameters
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| enabled | bool | False | Enable hardware simulation |
+| max_memory_mb | float | 512.0 | Maximum memory in megabytes |
+| compute_speed_factor | float | 1.0 | Compute speed multiplier (>1 = slower) |
+| precision_mode | str | "float32" | Required precision (float32, float16, int8) |
+| batch_size_limit | int | 128 | Maximum batch size allowed |
+
+## Memory Estimation
+
+### Estimate Memory Requirements
+
+```python
+from hardware_simulation import (
+    estimate_parameter_memory_mb,
+    estimate_activation_memory_mb,
+    estimate_total_memory_mb
+)
+from student import NeuralNetwork
+
+model = NeuralNetwork(
+    layer_sizes=[784, 128, 64, 10],
+    activations=["relu", "relu", "softmax"]
+)
+
+# Parameter memory
+param_mem = estimate_parameter_memory_mb(model, precision_mode="float32")
+print(f"Parameter memory: {param_mem:.4f} MB")
+
+# Activation memory
+act_mem = estimate_activation_memory_mb(model, batch_size=32, precision_mode="float32")
+print(f"Activation memory: {act_mem:.4f} MB")
+
+# Total memory
+total_mem = estimate_total_memory_mb(model, batch_size=32, precision_mode="float32")
+print(f"Total memory: {total_mem:.4f} MB")
+```
+
+## Batch Size Adjustment
+
+### Automatic Batch Size Reduction
+
+Adjust batch size to fit memory constraints:
+
+```python
+from hardware_simulation import adjust_batch_size_to_memory
+
+requested_batch_size = 128
+max_memory_mb = 256.0
+
+adjusted_batch = adjust_batch_size_to_memory(
+    model=model,
+    requested_batch_size=requested_batch_size,
+    max_memory_mb=max_memory_mb,
+    precision_mode="float32",
+    batch_size_limit=128
+)
+
+print(f"Requested: {requested_batch_size}")
+print(f"Adjusted: {adjusted_batch}")
+```
+
+The system uses binary search to find the largest feasible batch size.
+
+## Running with Hardware Constraints
+
+### Basic Usage
+
+```python
+from hardware_simulation import (
+    HardwareSimulationConfig,
+    run_training_with_hardware_constraints
+)
+import numpy as np
+
+# Create synthetic data
+X = np.random.randn(1000, 784).astype(np.float32)
+y = np.random.randint(0, 10, size=1000)
+
+# Define hardware constraints
+sim_config = HardwareSimulationConfig(
+    enabled=True,
+    max_memory_mb=256.0,
+    compute_speed_factor=1.5,
+    precision_mode="float16",
+    batch_size_limit=64
+)
+
+# Run training
+result = run_training_with_hardware_constraints(
+    model=model,
+    X=X,
+    y=y,
+    epochs=5,
+    alpha=0.01,
+    batch_size=128,
+    seed=42,
+    simulation_config=sim_config
+)
+
+print(f"Effective batch size: {result['setup']['batch_size']}")
+print(f"Training time: {result['training_time_s']:.2f}s")
+print(f"Effective time (with slowdown): {result['effective_time_s']:.2f}s")
+print(f"Final accuracy: {result['final_accuracy']:.4f}")
+```
+
+### Result Structure
+
+```json
+{
+  "setup": {
+    "enabled": true,
+    "batch_size": 64,
+    "precision_mode": "float16",
+    "estimated_memory_mb": 234.567,
+    "warnings": [
+      "Batch size reduced from 128 to 64 due to memory constraints."
+    ]
+  },
+  "training_time_s": 12.345,
+  "artificial_delay_s": 6.173,
+  "effective_time_s": 18.518,
+  "final_accuracy": 0.892,
+  "final_loss": 0.324
+}
+```
+
+## Compute Speed Simulation
+
+The `compute_speed_factor` parameter simulates slower hardware:
+
+```python
+# 1.0 = normal speed (no slowdown)
+# 2.0 = 2x slower (adds 100% delay)
+# 3.0 = 3x slower (adds 200% delay)
+
+sim_config = HardwareSimulationConfig(
+    enabled=True,
+    compute_speed_factor=2.0
+)
+
+# If training takes 10 seconds:
+# - training_time_s: 10.0
+# - artificial_delay_s: 10.0  (100% of 10s)
+# - effective_time_s: 20.0
+```
+
+### Implementation
+
+```python
+def apply_compute_slowdown(elapsed_seconds, compute_speed_factor):
+    if compute_speed_factor <= 1.0:
+        return 0.0
+    
+    delay = elapsed_seconds * (compute_speed_factor - 1.0)
+    time.sleep(delay)
+    return delay
+```
+
+## Precision Constraints
+
+Force specific precision modes:
+
+```python
+from hardware_simulation import apply_precision_constraint
+
+# Force float16 precision
+apply_precision_constraint(model, precision_mode="float16")
+
+# Model will now use float16 for inference
+output = model.forward(X, training=False, precision="float16")
+```
+
+## Warning System
+
+The simulation generates warnings for constraint violations:
+
+```python
+result = run_training_with_hardware_constraints(
+    model=model,
+    X=X, y=y,
+    epochs=5,
+    alpha=0.01,
+    batch_size=256,
+    seed=42,
+    simulation_config=config
+)
+
+for warning in result["setup"]["warnings"]:
+    print(f"⚠️  {warning}")
+```
+
+Common warnings:
+- Batch size reduced due to memory constraints
+- Projected memory exceeds limit
+- Model cannot run with batch_size=1
+
+## Integration with PrecisionConfig
+
+Create hardware simulation config from existing precision config:
+
+```python
+from hardware_simulation import config_from_precision_config
+from config import PrecisionConfig
+
+precision_cfg = PrecisionConfig(
+    enable_hardware_simulation=True,
+    max_memory_mb=512.0,
+    compute_speed_factor=1.5,
+    precision_mode="float16",
+    batch_size_limit=128
+)
+
+sim_config = config_from_precision_config(precision_cfg)
+```
+
+## Logging Results
+
+Save hardware simulation logs:
+
+```python
+from hardware_simulation import save_hardware_log
+
+log_payload = {
+    "simulation_config": sim_config,
+    "results": [result]
+}
+
+log_file = save_hardware_log(
+    log_payload,
+    output_dir="hardware_results",
+    filename="run_log.json"
+)
+
+print(f"Log saved to: {log_file}")
+```
+
+Log structure:
+```json
+{
+  "config": {
+    "enabled": true,
+    "max_memory_mb": 512.0,
+    "compute_speed_factor": 1.5,
+    "precision_mode": "float16",
+    "batch_size_limit": 128
+  },
+  "results": [
+    {
+      "setup": {...},
+      "training_time_s": 12.345,
+      "effective_time_s": 18.518,
+      "final_accuracy": 0.892
+    }
+  ]
+}
+```
+
+## Use Cases
+
+### Edge Device Simulation
+
+Simulate deployment on resource-constrained edge devices:
+
+```python
+edge_config = HardwareSimulationConfig(
+    enabled=True,
+    max_memory_mb=128.0,  # Limited RAM
+    compute_speed_factor=3.0,  # Much slower CPU
+    precision_mode="int8",  # Quantized inference
+    batch_size_limit=16
+)
+```
+
+### Mobile Device Simulation
+
+Simulate mobile deployment:
+
+```python
+mobile_config = HardwareSimulationConfig(
+    enabled=True,
+    max_memory_mb=256.0,
+    compute_speed_factor=2.0,
+    precision_mode="float16",
+    batch_size_limit=32
+)
+```
+
+### IoT Device Simulation
+
+Simulate IoT devices with severe constraints:
+
+```python
+iot_config = HardwareSimulationConfig(
+    enabled=True,
+    max_memory_mb=64.0,
+    compute_speed_factor=5.0,
+    precision_mode="int8",
+    batch_size_limit=8
+)
+```
+
+## Validation
+
+Check if model can run under constraints:
+
+```python
+from hardware_simulation import prepare_hardware_constrained_run
+
+setup = prepare_hardware_constrained_run(
+    model=model,
+    requested_batch_size=128,
+    simulation_config=config
+)
+
+if setup["warnings"]:
+    print("⚠️  Warnings:")
+    for warning in setup["warnings"]:
+        print(f"  - {warning}")
+else:
+    print("✅ Model can run without issues")
+
+print(f"Effective batch size: {setup['batch_size']}")
+print(f"Estimated memory: {setup['estimated_memory_mb']:.2f} MB")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Benchmarking" icon="stopwatch" href="/analysis/benchmarking">
+    Run performance benchmarks
+  </Card>
+  <Card title="Statistical Analysis" icon="chart-bar" href="/analysis/statistical-analysis">
+    Analyze results with confidence intervals
+  </Card>
+</CardGroup>

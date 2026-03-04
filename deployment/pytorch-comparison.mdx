@@ -1,0 +1,356 @@
+---
+title: 'PyTorch Comparison'
+description: 'Benchmark and compare your NumPy implementation against PyTorch'
+---
+
+## Overview
+
+The comparison framework benchmarks your scratch NumPy implementation against an equivalent PyTorch model. This helps validate correctness and understand performance characteristics across frameworks.
+
+## PyTorch Model Equivalent
+
+The `pytorch_model.py` module provides a PyTorch implementation with identical architecture:
+
+```python
+from pytorch_model import TorchNeuralNetwork, is_torch_available
+
+if is_torch_available():
+    model = TorchNeuralNetwork(
+        layer_sizes=[784, 64, 10],
+        activations=["relu", "softmax"],
+        seed=42
+    )
+```
+
+### Architecture Compatibility
+
+The PyTorch model mirrors the NumPy implementation:
+
+- **Layer structure**: Sequential fully connected layers
+- **Activations**: ReLU, Sigmoid, Softmax, Linear
+- **Weight initialization**: Consistent seeding for reproducibility
+- **Training loop**: SGD optimizer with mini-batches
+
+## Running Comparisons
+
+Use the `compare.py` script to benchmark both implementations:
+
+```python
+from compare import benchmark_scratch_vs_torch
+
+results = benchmark_scratch_vs_torch(
+    layer_sizes=[784, 64, 10],
+    activations=["relu", "softmax"],
+    n_samples=512,
+    epochs=3,
+    batch_size=32,
+    alpha=0.1,
+    seed=42
+)
+```
+
+### CLI Tool
+
+Run the comparison from the command line:
+
+```bash
+python compare.py
+```
+
+This executes a full benchmark and generates comparison reports.
+
+## Metrics Collected
+
+The comparison framework measures:
+
+| Metric | Description | Unit |
+|--------|-------------|------|
+| `train_time_per_epoch_s` | Average training time per epoch | seconds |
+| `inference_latency_per_sample_s` | Average inference time per sample | seconds |
+| `batch_throughput_samples_per_s` | Samples processed per second | samples/s |
+| `peak_memory_mb` | Peak memory usage during training | MB |
+| `final_accuracy` | Model accuracy after training | 0-1 |
+
+### Example Results
+
+```python
+[
+  {
+    "framework": "scratch_numpy",
+    "status": "ok",
+    "layer_sizes": "784x64x10",
+    "train_time_per_epoch_s": 0.125,
+    "inference_latency_per_sample_s": 0.000123,
+    "batch_throughput_samples_per_s": 8130.5,
+    "peak_memory_mb": 45.2,
+    "final_accuracy": 0.89
+  },
+  {
+    "framework": "pytorch",
+    "status": "ok",
+    "layer_sizes": "784x64x10",
+    "train_time_per_epoch_s": 0.098,
+    "inference_latency_per_sample_s": 0.000087,
+    "batch_throughput_samples_per_s": 11494.3,
+    "peak_memory_mb": 128.5,
+    "final_accuracy": 0.90
+  }
+]
+```
+
+## Output Formats
+
+Comparison results are saved in multiple formats:
+
+### JSON Report
+
+```json
+// benchmarks/comparison/comparison_metrics.json
+[
+  {
+    "framework": "scratch_numpy",
+    "status": "ok",
+    "train_time_per_epoch_s": 0.125,
+    ...
+  }
+]
+```
+
+### CSV Export
+
+```csv
+framework,status,train_time_per_epoch_s,inference_latency_per_sample_s,...
+scratch_numpy,ok,0.125,0.000123,...
+pytorch,ok,0.098,0.000087,...
+```
+
+### Visual Comparison
+
+A comparison plot is generated at `benchmarks/comparison/comparison_summary.png` showing:
+- Training time comparison
+- Inference latency comparison  
+- Memory usage comparison
+- Final accuracy comparison
+
+## Training Comparison
+
+Both models are trained with identical settings:
+
+```python
+# NumPy implementation
+from student import NeuralNetwork
+
+scratch_model = NeuralNetwork(
+    layer_sizes=layer_sizes,
+    activations=activations,
+    precision_config=cfg
+)
+
+history = scratch_model.fit(
+    X, y,
+    epochs=3,
+    alpha=0.1,
+    batch_size=32,
+    seed=42
+)
+```
+
+```python
+# PyTorch implementation
+from pytorch_model import TorchNeuralNetwork
+
+torch_model = TorchNeuralNetwork(
+    layer_sizes=layer_sizes,
+    activations=activations,
+    seed=42
+)
+
+history = torch_model.fit(
+    X, y,
+    epochs=3,
+    alpha=0.1,
+    batch_size=32,
+    seed=42
+)
+```
+
+### Training Parameters
+
+- **Optimizer**: Stochastic Gradient Descent (SGD)
+- **Loss function**: Mean Squared Error (MSE)
+- **Batch processing**: Mini-batch gradient descent
+- **Shuffling**: Random shuffle each epoch
+- **Seed**: Fixed for reproducibility
+
+## Inference Comparison
+
+Inference benchmarks measure both implementations:
+
+### NumPy Inference
+
+```python
+from benchmark import measure_inference_latency_per_sample
+
+latency = measure_inference_latency_per_sample(
+    scratch_model,
+    X,
+    precision="float32"
+)
+```
+
+### PyTorch Inference
+
+```python
+def _measure_torch_inference_latency_per_sample(model, X, precision="float32", runs=5):
+    times = []
+    for _ in range(runs):
+        t0 = time.perf_counter()
+        model.forward(X, training=False, precision=precision)
+        times.append(time.perf_counter() - t0)
+    return np.mean(times) / X.shape[0]
+```
+
+<Tip>
+Inference benchmarks include a warmup run to avoid cold-start overhead.
+</Tip>
+
+## Memory Profiling
+
+Peak memory usage is measured using `tracemalloc`:
+
+```python
+from benchmark import _measure_peak_memory_mb
+
+(result, peak_memory) = _measure_peak_memory_mb(
+    lambda: model.fit(X, y, epochs=3, alpha=0.1, batch_size=32, seed=42)
+)
+
+print(f"Peak memory: {peak_memory:.2f} MB")
+```
+
+### Memory Considerations
+
+- **NumPy**: Lower memory footprint, no framework overhead
+- **PyTorch**: Higher memory due to autograd graph and CUDA context
+
+## Handling Missing PyTorch
+
+The comparison gracefully handles missing PyTorch:
+
+```python
+if not is_torch_available():
+    results.append({
+        "framework": "pytorch",
+        "status": "skipped",
+        "notes": "torch not installed",
+        ...
+    })
+```
+
+<Note>
+If PyTorch is not installed, the comparison runs only the NumPy implementation and marks PyTorch as "skipped".
+</Note>
+
+## Interpreting Results
+
+### Performance Expectations
+
+**Training Speed**:
+- PyTorch is typically faster due to optimized C++ backend
+- NumPy implementation shows your optimization skills
+
+**Inference Speed**:
+- PyTorch optimized for batched operations
+- NumPy competitive for smaller models
+
+**Memory Usage**:
+- NumPy uses less memory (no framework overhead)
+- PyTorch allocates additional memory for autograd
+
+**Accuracy**:
+- Both should achieve similar final accuracy
+- Small differences due to numerical precision
+
+### Example Interpretation
+
+```python
+# NumPy: train_time = 0.125s, memory = 45MB
+# PyTorch: train_time = 0.098s, memory = 128MB
+
+# Speedup: 0.125 / 0.098 = 1.28x faster (PyTorch)
+# Memory ratio: 128 / 45 = 2.84x more memory (PyTorch)
+```
+
+## Customizing Comparisons
+
+Run custom benchmarks with different configurations:
+
+```python
+from compare import benchmark_scratch_vs_torch
+
+# Deep network comparison
+results = benchmark_scratch_vs_torch(
+    layer_sizes=[1024, 512, 256, 128, 10],
+    activations=["relu", "relu", "relu", "relu", "softmax"],
+    n_samples=1000,
+    epochs=5,
+    batch_size=64,
+    alpha=0.01,
+    seed=42
+)
+
+# Wide network comparison
+results = benchmark_scratch_vs_torch(
+    layer_sizes=[784, 256, 256, 10],
+    activations=["relu", "relu", "softmax"],
+    n_samples=500,
+    epochs=10,
+    batch_size=128,
+    alpha=0.05,
+    seed=123
+)
+```
+
+## Console Output
+
+The comparison prints a formatted table:
+
+```
+                     framework |                        status | train_time_per_epoch_s | ...
+-------------------------------------------------------------------------------------------------
+                 scratch_numpy |                            ok |                  0.125 | ...
+                       pytorch |                            ok |                  0.098 | ...
+```
+
+## Best Practices
+
+<Tip>
+**Consistent Seeds**: Always use the same seed for fair comparisons:
+
+```python
+set_global_seed(42)
+```
+</Tip>
+
+<Tip>
+**Warmup Runs**: Benchmarks include warmup iterations to avoid initialization overhead.
+</Tip>
+
+<Tip>
+**Multiple Runs**: Average over multiple runs (default: 5-10) for stable measurements.
+</Tip>
+
+<Warning>
+Avoid comparing results from different machines or Python versions - performance characteristics can vary significantly.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Inference Guide" icon="bolt" href="/deployment/inference">
+    Learn about loading checkpoints and running inference
+  </Card>
+  <Card title="ONNX Export" icon="file-export" href="/deployment/onnx-export">
+    Export models to ONNX for production deployment
+  </Card>
+</CardGroup>

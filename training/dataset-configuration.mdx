@@ -1,0 +1,286 @@
+---
+title: Dataset Configuration
+description: Prepare, validate, and load datasets with integrity checking
+---
+
+## Overview
+
+The dataset configuration system provides robust dataset management with integrity validation, automatic downloading, and support for both real and synthetic data.
+
+## Dataset Specification
+
+Datasets are defined using the `DatasetSpec` class (`dataset_config.py:14-25`):
+
+```python
+@dataclass(frozen=True)
+class DatasetSpec:
+    name: str
+    version: str
+    train_path: str
+    test_path: str
+    expected_features: int = 784
+    expected_min_rows: int = 100
+    download_base_url: str = "https://pjreddie.com/media/files"
+```
+
+### Fashion-MNIST Specification
+
+The default dataset specification (`dataset_config.py:27-32`):
+
+```python
+FASHION_MNIST_SPEC = DatasetSpec(
+    name="fashion-mnist",
+    version="v1",
+    train_path="Neural Network from Scratch/task/Data/fashion-mnist_train.csv",
+    test_path="Neural Network from Scratch/task/Data/fashion-mnist_test.csv",
+)
+```
+
+## Dataset Modes
+
+### Synthetic Mode
+
+Generate random data for testing (`train.py:33-41`):
+
+```python
+cfg = {
+    "synthetic_mode": True,
+    "synthetic_samples": 512,
+    "layer_sizes": [784, 64, 10],
+    "seed": 42
+}
+```
+
+Generates:
+- Features: Random normal distribution, shape `(n_samples, n_features)`
+- Labels: Random integers in `[0, n_classes)`
+- Reproducible with seed
+
+### Real Dataset Mode
+
+Load Fashion-MNIST CSV data:
+
+```python
+cfg = {
+    "synthetic_mode": False,
+    "dataset_path": "Neural Network from Scratch/task/Data/fashion-mnist_train.csv",
+    "dataset_version": "v1",
+    "dataset_min_rows": 100,
+    "dataset_auto_prepare": True,
+    "dataset_sha256": None  # Optional integrity check
+}
+```
+
+## Loading Datasets
+
+### Basic Loading
+
+Load and normalize a dataset (`dataset_config.py:95-105`):
+
+```python
+from dataset_config import load_dataset
+
+X, y = load_dataset("Neural Network from Scratch/task/Data/fashion-mnist_train.csv")
+# X: normalized features (float32)
+# y: integer labels (int32)
+```
+
+The loader automatically:
+- Parses CSV with header row
+- Extracts labels from first column
+- Extracts features from remaining columns
+- Normalizes features by maximum value
+- Returns `(X, y)` tuple
+
+### Ensuring Dataset Readiness
+
+Validate and optionally download dataset (`dataset_config.py:129-159`):
+
+```python
+from dataset_config import ensure_dataset_ready, FASHION_MNIST_SPEC
+
+n_rows, n_cols = ensure_dataset_ready(
+    spec=FASHION_MNIST_SPEC,
+    expected_features=784,
+    expected_min_rows=100,
+    auto_download=True,
+    expected_sha256=None  # Optional
+)
+```
+
+This function:
+1. Validates existing dataset
+2. If validation fails and `auto_download=True`, downloads dataset
+3. Re-validates after download
+4. Returns dataset dimensions
+
+## Dataset Validation
+
+### File-Level Checks
+
+Validate dataset integrity (`dataset_config.py:52-92`):
+
+```python
+from dataset_config import validate_dataset_file
+
+n_rows, n_cols = validate_dataset_file(
+    path="Neural Network from Scratch/task/Data/fashion-mnist_train.csv",
+    expected_features=784,
+    expected_min_rows=100,
+    expected_sha256="abc123..."  # Optional
+)
+```
+
+### Validation Checks
+
+The validator performs:
+
+1. **File existence** - Dataset file must exist
+2. **Non-empty file** - File size > 0 bytes
+3. **SHA256 hash** (optional) - Verify file integrity
+4. **CSV parsing** - Load data with comma delimiter
+5. **Shape validation** - Check `(*, expected_features + 1)` shape
+6. **Minimum rows** - Ensure sufficient samples
+7. **NaN detection** - No missing values allowed
+8. **Label range** - Labels must be in `[0, 9]`
+
+### Hash Computation
+
+Compute SHA256 digest for any file (`dataset_config.py:43-49`):
+
+```python
+from dataset_config import file_digest
+
+hash_value = file_digest("Neural Network from Scratch/task/Data/fashion-mnist_train.csv")
+print(hash_value)  # "abc123..."
+```
+
+## Automatic Download
+
+Download Fashion-MNIST datasets (`dataset_config.py:115-126`):
+
+```python
+from dataset_config import download_fashion_mnist, FASHION_MNIST_SPEC
+
+hashes = download_fashion_mnist(FASHION_MNIST_SPEC)
+# Returns:
+# {
+#     "train_sha256": "abc123...",
+#     "test_sha256": "def456..."
+# }
+```
+
+The download function:
+- Downloads from `spec.download_base_url`
+- Creates parent directories automatically
+- Returns SHA256 hashes of downloaded files
+- Times out after 120 seconds per file
+
+## Dataset Format
+
+### CSV Structure
+
+Expected format:
+
+```csv
+label,pixel1,pixel2,...,pixel784
+2,0,0,0,...,128
+5,0,12,45,...,200
+...
+```
+
+- First row: header (skipped during loading)
+- First column: label (0-9)
+- Remaining columns: pixel values (0-255)
+- Total columns: 785 (1 label + 784 features)
+
+### Normalization
+
+Features are normalized by maximum value:
+
+```python
+X_raw = data[:, 1:]  # Extract features
+scale = np.max(X_raw) if np.max(X_raw) > 0 else 1.0
+X = X_raw / scale  # Normalize to [0, 1]
+```
+
+## Train/Validation Split
+
+The training script includes splitting logic (`train.py:55-64`):
+
+```python
+def _train_val_split(X, y, val_ratio=0.1, seed=42):
+    rng = get_rng(seed)
+    idx = np.arange(X.shape[0])
+    rng.shuffle(idx)
+    
+    val_size = max(1, int(len(idx) * val_ratio))
+    val_idx = idx[:val_size]
+    train_idx = idx[val_size:]
+    
+    return X[train_idx], y[train_idx], X[val_idx], y[val_idx]
+```
+
+## Error Handling
+
+### Common Errors
+
+**FileNotFoundError**
+```
+Dataset file not found: Neural Network from Scratch/task/Data/fashion-mnist_train.csv
+```
+Solution: Set `dataset_auto_prepare=True` or run download script
+
+**ValueError: Dataset hash mismatch**
+```
+Dataset hash mismatch. expected=abc123, actual=def456
+```
+Solution: Re-download dataset or update expected hash
+
+**ValueError: Unexpected dataset shape**
+```
+Unexpected dataset shape: got (1000, 700), expected (*, 785)
+```
+Solution: Verify correct dataset file
+
+**ValueError: Too few rows**
+```
+Too few rows: got 50, expected at least 100
+```
+Solution: Use full dataset or reduce `dataset_min_rows`
+
+## Usage in Training
+
+The `train.py` script integrates dataset loading (`train.py:30-52`):
+
+```python
+def _load_training_data(cfg):
+    synthetic_mode = cfg.get("synthetic_mode", False)
+    
+    if synthetic_mode:
+        # Generate synthetic data
+        rng = get_rng(cfg.get("seed", 42))
+        n_samples = cfg.get("synthetic_samples", 512)
+        n_features = cfg["layer_sizes"][0]
+        n_classes = cfg["layer_sizes"][-1]
+        X = rng.normal(size=(n_samples, n_features)).astype(np.float32)
+        y = rng.integers(0, n_classes, size=n_samples, dtype=np.int32)
+        return X, y
+    
+    # Validate and load real dataset
+    ensure_dataset_ready(
+        spec=FASHION_MNIST_SPEC,
+        expected_features=cfg["layer_sizes"][0],
+        expected_min_rows=cfg.get("dataset_min_rows", 100),
+        auto_download=cfg.get("dataset_auto_prepare", False),
+        expected_sha256=cfg.get("dataset_sha256")
+    )
+    
+    dataset_path = cfg.get("dataset_path", FASHION_MNIST_SPEC.train_path)
+    return load_dataset(dataset_path)
+```
+
+## Related
+
+- [Running Experiments](/training/experiments) - Configure and run training
+- [Reproducibility](/concepts/reproducibility) - Deterministic data generation

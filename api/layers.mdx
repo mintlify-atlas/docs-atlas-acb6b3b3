@@ -1,0 +1,168 @@
+---
+title: 'Layers'
+description: 'Neural network layer implementations'
+---
+
+## DenseLayer
+
+A fully connected (dense) neural network layer that performs linear transformation: `z = xW + b`.
+
+### Constructor
+
+```python
+DenseLayer(n_in, n_out, rng=None, dtype=np.float32)
+```
+
+<ParamField path="n_in" type="int" required>
+  Number of input features.
+</ParamField>
+
+<ParamField path="n_out" type="int" required>
+  Number of output features (neurons in this layer).
+</ParamField>
+
+<ParamField path="rng" type="numpy.random.Generator" default="None">
+  Random number generator for weight initialization. Uses `np.random` if not provided.
+</ParamField>
+
+<ParamField path="dtype" type="numpy.dtype" default="np.float32">
+  Data type for weights and biases.
+</ParamField>
+
+### Attributes
+
+<ParamField path="weights" type="ndarray">
+  Weight matrix of shape `(n_in, n_out)`. Initialized using Xavier/Glorot uniform initialization.
+</ParamField>
+
+<ParamField path="bias" type="ndarray">
+  Bias vector of shape `(1, n_out)`. Initialized to zeros.
+</ParamField>
+
+<ParamField path="input_cache" type="ndarray">
+  Cached input from the last forward pass, used during backpropagation.
+</ParamField>
+
+<ParamField path="z_cache" type="ndarray">
+  Cached pre-activation output from the last forward pass.
+</ParamField>
+
+### Methods
+
+#### forward
+
+Performs forward propagation through the layer.
+
+```python
+forward(x, weights=None, bias=None)
+```
+
+<ParamField path="x" type="ndarray" required>
+  Input data of shape `(batch_size, n_in)`.
+</ParamField>
+
+<ParamField path="weights" type="ndarray" default="None">
+  Optional weight matrix to use instead of `self.weights`. Useful for inference with different precision.
+</ParamField>
+
+<ParamField path="bias" type="ndarray" default="None">
+  Optional bias vector to use instead of `self.bias`.
+</ParamField>
+
+**Returns:** `ndarray` - Pre-activation output of shape `(batch_size, n_out)`, computed as `x @ weights + bias`.
+
+#### backward
+
+Computes gradients during backpropagation.
+
+```python
+backward(delta, l2_lambda=0.0)
+```
+
+<ParamField path="delta" type="ndarray" required>
+  Gradient of loss with respect to layer output, shape `(batch_size, n_out)`.
+</ParamField>
+
+<ParamField path="l2_lambda" type="float" default="0.0">
+  L2 regularization strength. Adds regularization term to weight gradients.
+</ParamField>
+
+**Returns:** `tuple[ndarray, ndarray, ndarray]`
+- `grad_input`: Gradient with respect to input, shape `(batch_size, n_in)`
+- `grad_w`: Gradient with respect to weights, shape `(n_in, n_out)`
+- `grad_b`: Gradient with respect to bias, shape `(1, n_out)`
+
+### Usage Example
+
+```python
+import numpy as np
+from layers import DenseLayer
+
+# Create a dense layer: 784 inputs -> 128 outputs
+rng = np.random.default_rng(42)
+layer = DenseLayer(n_in=784, n_out=128, rng=rng)
+
+# Forward pass
+X = np.random.randn(32, 784).astype(np.float32)  # batch of 32 samples
+z = layer.forward(X)
+print(z.shape)  # (32, 128)
+
+# Backward pass
+delta = np.random.randn(32, 128).astype(np.float32)  # gradient from next layer
+grad_input, grad_w, grad_b = layer.backward(delta, l2_lambda=0.01)
+
+# Update weights
+learning_rate = 0.01
+layer.weights -= learning_rate * grad_w
+layer.bias -= learning_rate * grad_b
+```
+
+---
+
+## custom_uniform
+
+Xavier/Glorot uniform weight initialization function.
+
+```python
+custom_uniform(n_in, n_out, rng=None, dtype=np.float32)
+```
+
+<ParamField path="n_in" type="int" required>
+  Number of input features.
+</ParamField>
+
+<ParamField path="n_out" type="int" required>
+  Number of output features.
+</ParamField>
+
+<ParamField path="rng" type="numpy.random.Generator" default="None">
+  Random number generator. Uses `np.random` if not provided.
+</ParamField>
+
+<ParamField path="dtype" type="numpy.dtype" default="np.float32">
+  Data type for the returned array.
+</ParamField>
+
+**Returns:** `ndarray` - Weight matrix of shape `(n_in, n_out)` sampled from uniform distribution `U(-limit, limit)` where `limit = sqrt(6 / (n_in + n_out))`.
+
+### Usage Example
+
+```python
+from layers import custom_uniform
+import numpy as np
+
+rng = np.random.default_rng(42)
+weights = custom_uniform(n_in=784, n_out=128, rng=rng)
+print(weights.shape)  # (784, 128)
+print(f"Range: [{weights.min():.3f}, {weights.max():.3f}]")
+```
+
+### Mathematical Background
+
+Xavier initialization maintains variance across layers by sampling from:
+
+```
+W ~ U(-√(6/(n_in + n_out)), √(6/(n_in + n_out)))
+```
+
+This helps prevent vanishing or exploding gradients during training.

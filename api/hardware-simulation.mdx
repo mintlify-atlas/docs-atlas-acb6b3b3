@@ -1,0 +1,224 @@
+---
+title: "Hardware Simulation"
+description: "Simulate hardware constraints like memory limits, compute speed, and precision modes"
+---
+
+## Overview
+
+The hardware simulation module allows you to test neural network models under realistic hardware constraints such as memory limits, compute speed factors, and reduced precision modes.
+
+## HardwareSimulationConfig
+
+Dataclass for configuring hardware simulation parameters.
+
+### Fields
+
+<ParamField path="enabled" type="bool" default="false">
+  Whether hardware simulation is active.
+</ParamField>
+
+<ParamField path="max_memory_mb" type="float" default="512.0">
+  Maximum memory available in megabytes.
+</ParamField>
+
+<ParamField path="compute_speed_factor" type="float" default="1.0">
+  Simulated compute slowdown factor. Values > 1.0 add artificial delays.
+</ParamField>
+
+<ParamField path="precision_mode" type="str" default="float32">
+  Precision mode for computation. Options: `float32`, `float16`, `int8`.
+</ParamField>
+
+<ParamField path="batch_size_limit" type="int" default="128">
+  Maximum allowed batch size.
+</ParamField>
+
+### Example
+
+```python
+from hardware_simulation import HardwareSimulationConfig
+
+config = HardwareSimulationConfig(
+    enabled=True,
+    max_memory_mb=256.0,
+    compute_speed_factor=2.0,
+    precision_mode='float16',
+    batch_size_limit=64
+)
+```
+
+## Memory Estimation Functions
+
+### estimate_parameter_memory_mb
+
+Estimates the memory required for model parameters.
+
+**Parameters:**
+- `model` (object): Neural network model with `layers` attribute
+- `precision_mode` (str): One of `float32`, `float16`, `int8`
+
+**Returns:** float - Memory in megabytes
+
+### estimate_activation_memory_mb
+
+Estimates the memory required for activations during forward pass.
+
+**Parameters:**
+- `model` (object): Neural network model with `layer_sizes` attribute
+- `batch_size` (int): Batch size for estimation
+- `precision_mode` (str): One of `float32`, `float16`, `int8`
+
+**Returns:** float - Memory in megabytes
+
+### estimate_total_memory_mb
+
+Estimates total memory (parameters + activations).
+
+**Parameters:**
+- `model` (object): Neural network model
+- `batch_size` (int): Batch size
+- `precision_mode` (str): Precision mode
+
+**Returns:** float - Total memory in megabytes
+
+## Constraint Functions
+
+### adjust_batch_size_to_memory
+
+Automatically reduces batch size to fit within memory constraints.
+
+**Parameters:**
+- `model` (object): Neural network model
+- `requested_batch_size` (int): Desired batch size
+- `max_memory_mb` (float): Memory limit in MB
+- `precision_mode` (str): Precision mode
+- `batch_size_limit` (int): Maximum allowed batch size
+
+**Returns:** int - Adjusted batch size that fits in memory
+
+**Example:**
+```python
+from hardware_simulation import adjust_batch_size_to_memory
+
+adjusted_batch = adjust_batch_size_to_memory(
+    model=my_model,
+    requested_batch_size=128,
+    max_memory_mb=256.0,
+    precision_mode='float32',
+    batch_size_limit=128
+)
+print(f"Adjusted batch size: {adjusted_batch}")
+```
+
+### apply_precision_constraint
+
+Applies precision mode constraint to a model.
+
+**Parameters:**
+- `model` (object): Neural network model
+- `precision_mode` (str): Target precision mode
+
+**Returns:** None (modifies model in-place)
+
+### apply_compute_slowdown
+
+Simulates slower hardware by adding artificial delays.
+
+**Parameters:**
+- `elapsed_seconds` (float): Actual elapsed time
+- `compute_speed_factor` (float): Slowdown multiplier
+
+**Returns:** float - Additional delay added in seconds
+
+## Training with Constraints
+
+### prepare_hardware_constrained_run
+
+Prepares a model for hardware-constrained execution.
+
+**Parameters:**
+- `model` (object): Neural network model
+- `requested_batch_size` (int): Desired batch size
+- `simulation_config` (HardwareSimulationConfig): Simulation configuration
+
+**Returns:** Dictionary with:
+- `enabled`: Whether simulation is active
+- `batch_size`: Adjusted batch size
+- `precision_mode`: Applied precision mode
+- `estimated_memory_mb`: Projected memory usage
+- `warnings`: List of constraint warnings
+
+### run_training_with_hardware_constraints
+
+Runs model training under hardware constraints.
+
+**Parameters:**
+- `model` (object): Neural network model
+- `X` (array): Training features
+- `y` (array): Training labels
+- `epochs` (int): Number of epochs
+- `alpha` (float): Learning rate
+- `batch_size` (int): Requested batch size
+- `seed` (int): Random seed
+- `simulation_config` (HardwareSimulationConfig): Hardware configuration
+
+**Returns:** Dictionary with training results including:
+- `setup`: Hardware setup details
+- `training_time_s`: Actual training time
+- `artificial_delay_s`: Added delay from slowdown
+- `effective_time_s`: Total simulated time
+- `final_accuracy`: Final training accuracy
+- `final_loss`: Final loss value
+
+**Example:**
+```python
+from hardware_simulation import (
+    HardwareSimulationConfig,
+    run_training_with_hardware_constraints
+)
+
+config = HardwareSimulationConfig(
+    enabled=True,
+    max_memory_mb=128.0,
+    compute_speed_factor=1.5,
+    precision_mode='float16'
+)
+
+result = run_training_with_hardware_constraints(
+    model=model,
+    X=X_train,
+    y=y_train,
+    epochs=10,
+    alpha=0.01,
+    batch_size=64,
+    seed=42,
+    simulation_config=config
+)
+
+print(f"Effective batch size: {result['setup']['batch_size']}")
+print(f"Training time: {result['effective_time_s']:.2f}s")
+for warning in result['setup']['warnings']:
+    print(f"Warning: {warning}")
+```
+
+## Utility Functions
+
+### config_from_precision_config
+
+Creates a HardwareSimulationConfig from a precision config object.
+
+**Parameters:**
+- `precision_config` (object): Config object with hardware attributes
+
+**Returns:** HardwareSimulationConfig instance
+
+### save_hardware_log
+
+Saves hardware simulation logs to JSON.
+
+**Parameters:**
+- `log_payload` (dict): Log data with `simulation_config` and `results`
+- `output_dir` (str): Output directory
+- `filename` (str): Output filename
+
+**Returns:** Path - Path to saved log file

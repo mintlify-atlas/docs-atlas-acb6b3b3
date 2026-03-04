@@ -1,0 +1,209 @@
+---
+title: 'Loss Functions'
+description: 'Loss functions for training neural networks'
+---
+
+## MeanSquaredError
+
+Mean Squared Error (MSE) loss function with optional L2 regularization. Commonly used for regression and can be adapted for classification.
+
+### Methods
+
+#### forward
+
+Computes the mean squared error loss with optional L2 regularization.
+
+```python
+MeanSquaredError.forward(y_pred, y_true, weights=None, l2_lambda=0.0)
+```
+
+<ParamField path="y_pred" type="ndarray" required>
+  Predicted outputs of shape `(batch_size, n_outputs)`.
+</ParamField>
+
+<ParamField path="y_true" type="ndarray" required>
+  Ground truth labels of shape `(batch_size, n_outputs)`. Should be one-hot encoded for classification.
+</ParamField>
+
+<ParamField path="weights" type="list[ndarray]" default="None">
+  List of weight matrices from all layers. Required when `l2_lambda > 0` for regularization.
+</ParamField>
+
+<ParamField path="l2_lambda" type="float" default="0.0">
+  L2 regularization strength. When `> 0`, adds penalty term `0.5 * λ * Σ(w²)` to the loss.
+</ParamField>
+
+**Returns:** `float` - Scalar loss value.
+
+**Formula:**
+```
+Loss = 0.5 * mean(Σ((y_pred - y_true)²)) + 0.5 * λ * Σ(w²)
+       └─────────────┬────────────────┘   └──────┬──────┘
+              data loss                  regularization
+```
+
+#### backward
+
+Computes the gradient of the loss with respect to predictions.
+
+```python
+MeanSquaredError.backward(y_pred, y_true)
+```
+
+<ParamField path="y_pred" type="ndarray" required>
+  Predicted outputs of shape `(batch_size, n_outputs)`.
+</ParamField>
+
+<ParamField path="y_true" type="ndarray" required>
+  Ground truth labels of shape `(batch_size, n_outputs)`.
+</ParamField>
+
+**Returns:** `ndarray` - Gradient of loss with respect to predictions, shape `(batch_size, n_outputs)`.
+
+**Formula:** `∂L/∂y_pred = y_pred - y_true`
+
+## Usage Examples
+
+### Basic Loss Calculation
+
+```python
+import numpy as np
+from loss import MeanSquaredError
+
+# Predictions and ground truth (one-hot encoded)
+y_pred = np.array([
+    [0.7, 0.2, 0.1],
+    [0.1, 0.8, 0.1]
+])
+
+y_true = np.array([
+    [1.0, 0.0, 0.0],  # True class: 0
+    [0.0, 1.0, 0.0]   # True class: 1
+])
+
+# Compute loss
+loss = MeanSquaredError.forward(y_pred, y_true)
+print(f"Loss: {loss:.4f}")  # Loss: 0.0600
+
+# Compute gradient
+grad = MeanSquaredError.backward(y_pred, y_true)
+print(grad)
+# [[-0.3  0.2  0.1]
+#  [ 0.1 -0.2  0.1]]
+```
+
+### Loss with L2 Regularization
+
+```python
+import numpy as np
+from loss import MeanSquaredError
+
+# Model predictions
+y_pred = np.array([[0.7, 0.2, 0.1]])
+y_true = np.array([[1.0, 0.0, 0.0]])
+
+# Model weights from two layers
+weights = [
+    np.random.randn(10, 5),  # Layer 1 weights
+    np.random.randn(5, 3)    # Layer 2 weights
+]
+
+# Loss without regularization
+loss_no_reg = MeanSquaredError.forward(y_pred, y_true, weights=None, l2_lambda=0.0)
+print(f"Loss (no reg): {loss_no_reg:.4f}")
+
+# Loss with L2 regularization
+loss_with_reg = MeanSquaredError.forward(y_pred, y_true, weights=weights, l2_lambda=0.01)
+print(f"Loss (with reg): {loss_with_reg:.4f}")
+```
+
+### Integration with Neural Network
+
+```python
+from model import NeuralNetworkModel
+import numpy as np
+
+# Create model with L2 regularization
+model = NeuralNetworkModel(
+    layer_sizes=[784, 128, 10],
+    activations=['relu', 'softmax'],
+    l2_lambda=0.01  # L2 regularization coefficient
+)
+
+# Training data
+X_train = np.random.randn(100, 784).astype(np.float32)
+y_train = np.random.randint(0, 10, size=100)
+
+# The model internally uses MeanSquaredError for loss calculation
+history = model.fit(X_train, y_train, epochs=10, alpha=0.01)
+
+# Access training loss (includes regularization)
+print(f"Final training loss: {history['loss'][-1]:.4f}")
+```
+
+### Custom Training Loop
+
+```python
+import numpy as np
+from model import NeuralNetworkModel
+from loss import MeanSquaredError
+
+model = NeuralNetworkModel(
+    layer_sizes=[784, 64, 10],
+    activations=['relu', 'softmax'],
+    l2_lambda=0.001
+)
+
+# One training step
+X_batch = np.random.randn(32, 784).astype(np.float32)
+y_batch_onehot = np.eye(10)[np.random.randint(0, 10, 32)]  # One-hot encoded
+
+# Forward pass
+y_pred = model.forward(X_batch, training=True)
+
+# Compute loss
+loss = MeanSquaredError.forward(
+    y_pred, 
+    y_batch_onehot, 
+    weights=model.weights,
+    l2_lambda=0.001
+)
+
+print(f"Batch loss: {loss:.4f}")
+
+# Compute gradients
+grad = MeanSquaredError.backward(y_pred, y_batch_onehot)
+print(f"Gradient shape: {grad.shape}")  # (32, 10)
+```
+
+## Mathematical Details
+
+### MSE Loss
+
+For a batch of size `N` with `C` output dimensions:
+
+```
+Loss = (1/2N) * Σᵢ Σⱼ (yᵢⱼ_pred - yᵢⱼ_true)²
+```
+
+The factor of `1/2` simplifies the gradient to `y_pred - y_true`.
+
+### L2 Regularization
+
+Penalizes large weights to prevent overfitting:
+
+```
+Reg_loss = (λ/2) * Σₗ Σᵢⱼ wₗᵢⱼ²
+```
+
+Where `λ` is `l2_lambda` and `w` are the weights from all layers.
+
+### Gradient
+
+The gradient with respect to predictions is:
+
+```
+∂L/∂y_pred = (y_pred - y_true) / N
+```
+
+Note: The implementation returns `y_pred - y_true` without the `/N` factor, as the averaging is handled during weight updates in the model's backward pass.

@@ -1,0 +1,271 @@
+---
+title: 'ONNX Export'
+description: 'Export models to ONNX format for production deployment'
+---
+
+## Overview
+
+ONNX (Open Neural Network Exchange) is an open format for machine learning models. Exporting to ONNX enables deployment across multiple frameworks and platforms, including TensorFlow, PyTorch, and specialized inference engines.
+
+## Requirements
+
+ONNX export requires additional dependencies:
+
+```bash
+pip install torch onnx onnxruntime
+```
+
+<Warning>
+ONNX export uses PyTorch as an intermediate framework. Both `torch` and `onnx` packages must be installed.
+</Warning>
+
+## Exporting to ONNX
+
+Use the `export_onnx_from_pytorch` function to export your model:
+
+```python
+from deployment import export_onnx_from_pytorch
+
+layer_sizes = [784, 64, 10]
+activations = ["relu", "softmax"]
+
+onnx_path = export_onnx_from_pytorch(
+    layer_sizes=layer_sizes,
+    activations=activations,
+    output_path="exports/model.onnx"
+)
+
+print(f"Model exported to: {onnx_path}")
+```
+
+### Export Process
+
+The export process:
+1. Creates a PyTorch model with equivalent architecture
+2. Initializes weights with the specified seed
+3. Generates a dummy input tensor
+4. Exports to ONNX format with dynamic batch sizes
+
+### ONNX Configuration
+
+The export uses the following ONNX settings:
+
+| Setting | Value | Description |
+|---------|-------|-------------|
+| `opset_version` | 13 | ONNX operator set version |
+| `input_names` | `["input"]` | Named input tensor |
+| `output_names` | `["output"]` | Named output tensor |
+| `dynamic_axes` | Batch dimension | Allows variable batch sizes |
+
+```python
+# Dynamic axes configuration
+dynamic_axes = {
+    "input": {0: "batch_size"},
+    "output": {0: "batch_size"}
+}
+```
+
+## CLI Export
+
+Export models using the inference CLI:
+
+```bash
+python inference.py \
+  --weights checkpoints/model.npz \
+  --export-onnx
+```
+
+This runs inference and exports the ONNX model to `exports/model.onnx`.
+
+## Validating ONNX Export
+
+Validate that the exported model produces correct outputs:
+
+```python
+from deployment import validate_onnx_export
+
+layer_sizes = [784, 64, 10]
+activations = ["relu", "softmax"]
+
+is_valid, max_diff = validate_onnx_export(
+    layer_sizes=layer_sizes,
+    activations=activations,
+    onnx_path="exports/model.onnx",
+    seed=42
+)
+
+print(f"Valid: {is_valid}")
+print(f"Max absolute difference: {max_diff}")
+```
+
+### Validation Process
+
+Validation compares outputs between:
+1. **PyTorch model**: Reference implementation
+2. **ONNX Runtime**: Exported model
+
+The validation:
+- Generates random test inputs (3 samples)
+- Runs inference on both models
+- Compares outputs using `np.allclose` with tolerances:
+  - Absolute tolerance: `1e-5`
+  - Relative tolerance: `1e-4`
+
+<Tip>
+A maximum absolute difference below `1e-4` indicates successful export.
+</Tip>
+
+## Running ONNX Inference
+
+Use ONNX Runtime for production inference:
+
+```python
+import numpy as np
+import onnxruntime as ort
+
+# Load ONNX model
+session = ort.InferenceSession(
+    "exports/model.onnx",
+    providers=["CPUExecutionProvider"]
+)
+
+# Prepare input
+X = np.random.randn(32, 784).astype(np.float32)
+
+# Run inference
+input_name = session.get_inputs()[0].name
+outputs = session.run(None, {input_name: X})
+predictions = outputs[0]
+
+print(predictions.shape)  # (32, 10)
+```
+
+### Execution Providers
+
+ONNX Runtime supports multiple execution providers:
+
+- **CPUExecutionProvider**: CPU inference (default)
+- **CUDAExecutionProvider**: NVIDIA GPU acceleration
+- **TensorrtExecutionProvider**: NVIDIA TensorRT optimization
+- **OpenVINOExecutionProvider**: Intel hardware optimization
+
+```python
+# Use GPU if available
+session = ort.InferenceSession(
+    "exports/model.onnx",
+    providers=["CUDAExecutionProvider", "CPUExecutionProvider"]
+)
+```
+
+## Architecture Support
+
+The ONNX exporter supports all standard architectures:
+
+### Layer Types
+- Fully connected (Linear) layers
+- All layer sizes
+
+### Activations
+- ReLU
+- Sigmoid
+- Softmax
+- Linear (identity)
+
+### Example Architectures
+
+```python
+# Simple classifier
+layer_sizes = [784, 64, 10]
+activations = ["relu", "softmax"]
+
+# Deep network
+layer_sizes = [1024, 512, 256, 128, 10]
+activations = ["relu", "relu", "relu", "relu", "softmax"]
+
+# Binary classifier
+layer_sizes = [100, 50, 1]
+activations = ["relu", "sigmoid"]
+```
+
+## Troubleshooting
+
+### PyTorch Not Installed
+
+```python
+RuntimeError: Cannot export ONNX because torch is not installed
+```
+
+**Solution**: Install PyTorch:
+```bash
+pip install torch
+```
+
+### ONNX Package Missing
+
+```python
+RuntimeError: Cannot export ONNX because onnx is not installed
+```
+
+**Solution**: Install ONNX:
+```bash
+pip install onnx
+```
+
+### Validation Failures
+
+If validation shows large differences:
+1. Check that the seed is consistent
+2. Verify the architecture matches
+3. Ensure numerical stability (avoid extreme values)
+
+<Note>
+Small numerical differences (< 1e-4) are expected due to different implementations of operations across frameworks.
+</Note>
+
+## Production Deployment
+
+### Model Serving
+
+Deploy ONNX models using popular serving frameworks:
+
+```python
+# Example: FastAPI serving
+from fastapi import FastAPI
+import onnxruntime as ort
+import numpy as np
+
+app = FastAPI()
+session = ort.InferenceSession("model.onnx")
+
+@app.post("/predict")
+def predict(data: list):
+    x = np.array(data, dtype=np.float32)
+    input_name = session.get_inputs()[0].name
+    outputs = session.run(None, {input_name: x})
+    return {"predictions": outputs[0].tolist()}
+```
+
+### Optimization
+
+Optimize ONNX models for production:
+
+```python
+import onnx
+from onnxruntime.transformers import optimizer
+
+# Load and optimize
+model = onnx.load("model.onnx")
+optimized = optimizer.optimize_model(model)
+optimized.save("model_optimized.onnx")
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Inference Guide" icon="bolt" href="/deployment/inference">
+    Learn about inference and checkpoint loading
+  </Card>
+  <Card title="PyTorch Comparison" icon="chart-bar" href="/deployment/pytorch-comparison">
+    Benchmark against PyTorch implementations
+  </Card>
+</CardGroup>

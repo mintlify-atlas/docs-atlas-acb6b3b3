@@ -1,0 +1,287 @@
+---
+title: Profiling
+description: Profile neural network architectures to analyze parameter counts, memory footprints, and activation sizes
+---
+
+The profiling system analyzes model architecture, counts parameters, estimates memory requirements across different data types, and tracks activation memory usage.
+
+## Quick Start
+
+### Command Line Usage
+
+Profile a model from a configuration file:
+
+```bash
+python profiler.py --config config.py
+```
+
+### Programmatic Usage
+
+```python
+from profiler import profile_model
+from student import NeuralNetwork
+
+model = NeuralNetwork(
+    layer_sizes=[784, 128, 64, 10],
+    activations=["relu", "relu", "softmax"]
+)
+
+report, output_file = profile_model(
+    model=model,
+    batch_size=32,
+    output_dir="profiling"
+)
+
+print(f"Total parameters: {report['total_trainable_parameters']:,}")
+print(f"Report saved to: {output_file}")
+```
+
+## Profiling Report
+
+### Report Structure
+
+The profiling report is a JSON file containing:
+
+```json
+{
+  "timestamp": "2026-03-04T10:15:30Z",
+  "model": "NeuralNetwork",
+  "layer_sizes": [784, 128, 64, 10],
+  "batch_size": 32,
+  "total_trainable_parameters": 107530,
+  "layer_wise_parameters": [...],
+  "parameter_memory_mb": {
+    "float32": 0.410,
+    "float16": 0.205,
+    "int8": 0.103
+  },
+  "activation_memory": {
+    "bytes": 123904,
+    "mb": 0.118,
+    "details": [...]
+  }
+}
+```
+
+### Layer-wise Parameters
+
+Each layer reports:
+
+```json
+{
+  "layer": "layer_1",
+  "type": "Layer",
+  "weights": 100352,
+  "bias": 128,
+  "total": 100480,
+  "weights_shape": [784, 128],
+  "bias_shape": [128]
+}
+```
+
+## Memory Analysis
+
+### Parameter Memory
+
+Memory requirements vary by data type:
+
+| Data Type | Bytes per Parameter | Example (100K params) |
+|-----------|---------------------|------------------------|
+| float32   | 4                   | 0.381 MB              |
+| float16   | 2                   | 0.191 MB              |
+| int8      | 1                   | 0.095 MB              |
+
+### Activation Memory
+
+Activation memory depends on batch size and layer widths:
+
+```python
+# For batch_size=32, layer_sizes=[784, 128, 64, 10]
+# Activation memory includes:
+# - Input: 32 × 784 = 25,088 elements
+# - Hidden 1: 32 × 128 = 4,096 elements
+# - Hidden 2: 32 × 64 = 2,048 elements
+# - Output: 32 × 10 = 320 elements
+# Total: 31,552 elements × 4 bytes = 126,208 bytes ≈ 0.12 MB
+```
+
+## Summary Table
+
+```python
+from profiler import profile_model, summary_table
+
+report, _ = profile_model(model, batch_size=32)
+print(summary_table(report))
+```
+
+Output:
+```
+Model Profiling Summary
+========================================================================
+Model: NeuralNetwork
+Layer sizes: [784, 128, 64, 10]
+Total trainable parameters: 107,530
+
+Layer-wise parameters:
+Layer       Type            Weights        Bias       Total
+------------------------------------------------------------------------
+layer_1     Layer           100,352         128     100,480
+layer_2     Layer             8,192          64       8,256
+layer_3     Layer               640          10         650
+
+Parameter memory footprint (MB):
+  float32: 0.409546
+  float16: 0.204773
+  int8:    0.102386
+
+Activation memory estimate:
+  bytes: 126208
+  mb:    0.120361
+```
+
+## Configuration-based Profiling
+
+Create a configuration file `config.py`:
+
+```python
+from student import NeuralNetwork
+from config import PrecisionConfig
+
+LAYER_SIZES = [784, 128, 64, 10]
+ACTIVATIONS = ["relu", "relu", "softmax"]
+DEFAULT_CONFIG = PrecisionConfig()
+
+PROFILE_BATCH_SIZE = 32
+PROFILE_OUTPUT_DIR = "profiling"
+
+def build_model():
+    return NeuralNetwork(
+        layer_sizes=LAYER_SIZES,
+        activations=ACTIVATIONS,
+        precision_config=DEFAULT_CONFIG
+    )
+```
+
+Run profiling:
+
+```bash
+python profiler.py --config config.py
+```
+
+## Advanced Usage
+
+### Custom Model Classes
+
+Profile any model with a `layer_sizes` attribute:
+
+```python
+class CustomModel:
+    def __init__(self, layer_sizes):
+        self.layer_sizes = layer_sizes
+        self.layers = [...]
+    
+    def forward(self, x, training=False, precision="float32"):
+        # Forward pass implementation
+        pass
+
+model = CustomModel(layer_sizes=[100, 50, 10])
+report, output_file = profile_model(model, batch_size=16)
+```
+
+### Activation Memory Details
+
+Access detailed activation memory breakdown:
+
+```python
+report, _ = profile_model(model, batch_size=32)
+
+for detail in report["activation_memory"]["details"]:
+    print(f"{detail['tensor']}: {detail['shape']} = {detail['bytes']:,} bytes")
+```
+
+Output:
+```
+input: [32, 784] = 100,352 bytes
+activation_1: [32, 128] = 16,384 bytes
+activation_2: [32, 64] = 8,192 bytes
+activation_3: [32, 10] = 1,280 bytes
+```
+
+## Memory Optimization Tips
+
+### Reduce Precision
+
+Use lower precision for inference:
+
+```python
+# float32: 0.410 MB
+# float16: 0.205 MB (50% reduction)
+# int8:    0.103 MB (75% reduction)
+
+model.infer_precision = "float16"
+```
+
+### Adjust Batch Size
+
+Activation memory scales linearly with batch size:
+
+```python
+# Batch size 32: 0.120 MB
+# Batch size 16: 0.060 MB
+# Batch size 8:  0.030 MB
+
+report_small, _ = profile_model(model, batch_size=8)
+report_large, _ = profile_model(model, batch_size=64)
+```
+
+### Layer Size Impact
+
+Parameter memory scales with layer dimensions:
+
+```python
+# [784, 128, 10]: ~100K parameters
+# [784, 64, 10]:  ~50K parameters (50% reduction)
+# [784, 32, 10]:  ~25K parameters (75% reduction)
+```
+
+## Integration with Benchmarking
+
+Enable profiling during benchmarks:
+
+```python
+from benchmark import benchmark_one_setup
+
+result = benchmark_one_setup(
+    layer_sizes=[784, 128, 10],
+    activations=["relu", "softmax"],
+    precision_mode="float32",
+    batch_size=32,
+    enable_profiling=True
+)
+
+if "profiling_report" in result:
+    print(f"Profiling report: {result['profiling_report']}")
+```
+
+## Output Files
+
+Profiling generates JSON reports in the specified output directory:
+
+```
+profiling/
+├── profile_neuralnetwork.json
+└── ...
+```
+
+Each report includes timestamp, model architecture, parameter counts, and memory estimates.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Benchmarking" icon="stopwatch" href="/analysis/benchmarking">
+    Run performance benchmarks
+  </Card>
+  <Card title="Hardware Simulation" icon="microchip" href="/analysis/hardware-simulation">
+    Simulate hardware constraints
+  </Card>
+</CardGroup>

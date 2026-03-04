@@ -1,0 +1,425 @@
+---
+title: Installation
+description: Set up your environment for hardware-aware neural network experiments
+---
+
+This guide covers environment setup, dependency installation, and verification for reproducible experiments.
+
+## System requirements
+
+Before you begin, ensure your system meets these requirements:
+
+- **Python**: 3.8 or higher (3.10+ recommended)
+- **Operating system**: Linux, macOS, or Windows with Python support
+- **RAM**: 4GB minimum (8GB+ recommended for larger experiments)
+- **CPU**: Any modern x86_64 or ARM processor (CPU-focused, no GPU required)
+
+<Note>
+This framework is designed for CPU execution and reproducible research. It does not require specialized hardware like GPUs or TPUs.
+</Note>
+
+## Installation
+
+<Steps>
+
+<Step title="Clone the repository">
+
+Clone the project to your local machine:
+
+```bash
+git clone <repository-url>
+cd source
+```
+
+</Step>
+
+<Step title="Create a virtual environment (recommended)">
+
+Isolate your dependencies using a virtual environment:
+
+<CodeGroup>
+
+```bash Linux/macOS
+python -m venv venv
+source venv/bin/activate
+```
+
+```bash Windows
+python -m venv venv
+venv\Scripts\activate
+```
+
+</CodeGroup>
+
+You should see `(venv)` in your terminal prompt after activation.
+
+</Step>
+
+<Step title="Install required dependencies">
+
+Install the core packages from `requirements.txt`:
+
+```bash
+pip install -r requirements.txt
+```
+
+This installs:
+
+- **numpy** (1.26.4): Core array operations and tensor math
+- **pandas** (2.2.2): Dataset loading and CSV handling
+- **matplotlib** (3.8.4): Visualization for training curves and benchmarks
+- **psutil** (5.9.8): Memory profiling and system resource monitoring
+- **requests** (2.32.3): Dataset download utilities
+- **tqdm** (4.66.4): Progress bars for training and data loading
+
+</Step>
+
+<Step title="Install optional dependencies (optional)">
+
+For framework comparison and ONNX export, install the optional packages:
+
+```bash
+pip install torch==2.3.1 onnx==1.16.1 onnxruntime==1.18.1
+```
+
+<Warning>
+These dependencies are large (PyTorch is ~800MB). Only install them if you need framework comparison features or ONNX export.
+</Warning>
+
+The framework works fully without these packages—they're guarded by runtime checks.
+
+</Step>
+
+<Step title="Install development dependencies (optional)">
+
+For testing and development, install the dev requirements:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+This includes pytest and other tools for running the test suite.
+
+</Step>
+
+</Steps>
+
+## Verify your installation
+
+After installing dependencies, verify your environment is configured correctly.
+
+### Run the verification script
+
+Execute the environment verification script:
+
+```bash
+python scripts/verify_environment.py
+```
+
+### Expected output
+
+You should see output similar to this:
+
+```
+Python: 3.11.0
+Platform: Linux-5.15.0-x86_64-with-glibc2.35
+
+Required packages:
+  - numpy: OK (1.26.4)
+  - matplotlib: OK (3.8.4)
+  - psutil: OK (5.9.8)
+  - requests: OK (2.32.3)
+  - tqdm: OK (4.66.4)
+
+Optional packages:
+  - torch: OK (2.3.1)
+  - pytest: OK (7.4.0)
+
+Dataset status:
+  - fashion-mnist: train_exists=False size=0, test_exists=False size=0
+```
+
+### Interpreting the output
+
+- **Required packages**: All must show `OK` with version numbers
+- **Optional packages**: Can show `MISSING` if you didn't install them
+- **Dataset status**: Shows `False` until you download Fashion-MNIST (see below)
+
+<Tip>
+If any required package shows `MISSING`, re-run `pip install -r requirements.txt` and check for installation errors.
+</Tip>
+
+## Understanding the verification script
+
+The verification script checks your environment systematically:
+
+```python scripts/verify_environment.py
+REQUIRED = ["numpy", "matplotlib", "psutil", "requests", "tqdm"]
+OPTIONAL = ["torch", "pytest"]
+
+def check_module(name: str) -> str:
+    try:
+        mod = importlib.import_module(name)
+        version = getattr(mod, "__version__", "unknown")
+        return f"OK ({version})"
+    except Exception as exc:
+        return f"MISSING ({exc})"
+```
+
+It verifies:
+1. Python version and platform information
+2. All required packages are importable with correct versions
+3. Optional packages (if installed)
+4. Dataset files (if downloaded)
+
+## Dataset preparation
+
+The framework supports two data modes:
+
+### Synthetic mode (default)
+
+No setup required. The framework generates random data for fast iteration:
+
+```bash
+python scripts/run_workflow.py --mode train --experiment baseline
+```
+
+Synthetic mode uses deterministic random generation with fixed seeds for reproducibility.
+
+### Real data mode (Fashion-MNIST)
+
+For production-like experiments, download the Fashion-MNIST dataset:
+
+<Steps>
+
+<Step title="Download Fashion-MNIST">
+
+Run the download script:
+
+```bash
+python scripts/download_fashion_mnist.py --out-dir "Neural Network from Scratch/task/Data"
+```
+
+This downloads two CSV files:
+- `fashion-mnist_train.csv` (~120MB): 60,000 training samples
+- `fashion-mnist_test.csv` (~20MB): 10,000 test samples
+
+</Step>
+
+<Step title="Verify the download">
+
+Re-run the verification script to confirm the dataset is ready:
+
+```bash
+python scripts/verify_environment.py
+```
+
+You should see:
+
+```
+Dataset status:
+  - fashion-mnist: train_exists=True size=123456789, test_exists=True size=12345678
+```
+
+</Step>
+
+<Step title="Use the dataset in experiments">
+
+Run experiments with the `real_fashion_mnist` configuration:
+
+```bash
+python scripts/run_workflow.py --mode full --experiment real_fashion_mnist
+```
+
+</Step>
+
+</Steps>
+
+<Note>
+The download script validates file integrity using SHA256 checksums and includes retry logic for network failures.
+</Note>
+
+## Dependency versions and reproducibility
+
+The framework uses pinned dependency versions for reproducible experiments:
+
+```txt requirements.txt
+numpy==1.26.4
+pandas==2.2.2
+matplotlib==3.8.4
+psutil==5.9.8
+requests==2.32.3
+tqdm==4.66.4
+```
+
+<Warning>
+Using different versions may produce different numerical results due to changes in random number generation, floating-point operations, or algorithm implementations.
+</Warning>
+
+### Why pinned versions matter
+
+For reproducible research:
+
+1. **Numerical stability**: NumPy versions can differ in floating-point precision
+2. **API compatibility**: Avoid breaking changes in dependencies
+3. **Deterministic results**: Same code + same versions + same seed = same output
+4. **Experiment comparison**: Compare results across time and machines reliably
+
+If you need to upgrade dependencies, update `requirements.txt` and re-run all baseline experiments to establish new reference results.
+
+## Project structure after installation
+
+After installation, your directory structure looks like this:
+
+```
+source/
+├── Neural Network from Scratch/
+│   └── task/
+│       ├── train.py           # Training entrypoint
+│       ├── benchmark.py       # Performance benchmarking
+│       ├── student.py         # Neural network implementation
+│       ├── config.py          # Experiment configurations
+│       ├── dataset_config.py  # Dataset specifications
+│       └── Data/              # Dataset directory (after download)
+├── scripts/
+│   ├── verify_environment.py  # Environment checker
+│   ├── run_workflow.py        # Workflow orchestration
+│   └── download_fashion_mnist.py  # Dataset downloader
+├── experiments/               # Generated logs and checkpoints
+├── artifacts/                 # Generated reports
+├── requirements.txt
+└── requirements-dev.txt
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+
+<Accordion title="pip install fails with version conflicts">
+Upgrade pip and try again:
+
+```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+If conflicts persist, create a fresh virtual environment.
+</Accordion>
+
+<Accordion title="NumPy import fails on macOS ARM (M1/M2)">
+Ensure you're using an ARM-native Python installation:
+
+```bash
+python -c "import platform; print(platform.machine())"
+```
+
+Should output `arm64`. If it shows `x86_64`, reinstall Python for Apple Silicon.
+</Accordion>
+
+<Accordion title="verify_environment.py shows 'MISSING' for required packages">
+Check if you activated your virtual environment:
+
+```bash
+which python  # Should point to venv/bin/python
+```
+
+If not, activate it:
+
+```bash
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate      # Windows
+```
+</Accordion>
+
+<Accordion title="Dataset download fails or times out">
+Manually download the files from the mirrors and place them in the correct directory:
+
+```bash
+mkdir -p "Neural Network from Scratch/task/Data"
+cd "Neural Network from Scratch/task/Data"
+# Download fashion-mnist_train.csv and fashion-mnist_test.csv manually
+```
+
+Then verify the files are recognized:
+
+```bash
+python scripts/verify_environment.py
+```
+</Accordion>
+
+<Accordion title="Python version too old">
+You need Python 3.8 or higher. Check your version:
+
+```bash
+python --version
+```
+
+If it's too old, install a newer version:
+
+- **Linux**: Use `pyenv` or your distribution's package manager
+- **macOS**: Use `brew install python@3.11`
+- **Windows**: Download from [python.org](https://python.org)
+</Accordion>
+
+</AccordionGroup>
+
+## Next steps
+
+Now that your environment is set up:
+
+<CardGroup cols={2}>
+
+<Card title="Run your first experiment" icon="rocket" href="/quickstart">
+  Train a model and see benchmark results in under 5 minutes
+</Card>
+
+<Card title="Understand the architecture" icon="sitemap" href="/concepts/architecture">
+  Learn how the framework is structured
+</Card>
+
+<Card title="Configure experiments" icon="sliders" href="/api/config">
+  Customize layer sizes, precision, and constraints
+</Card>
+
+<Card title="Explore the API" icon="code" href="/api/model">
+  Dive into the module-level documentation
+</Card>
+
+</CardGroup>
+
+## Best practices
+
+For the best experience:
+
+<Steps>
+
+<Step title="Use virtual environments">
+Always isolate project dependencies to avoid conflicts:
+
+```bash
+python -m venv venv
+source venv/bin/activate
+```
+</Step>
+
+<Step title="Pin dependency versions">
+Never use `pip install package` without version pins in production experiments. Always use `requirements.txt`.
+</Step>
+
+<Step title="Verify after installation">
+Run `scripts/verify_environment.py` after any environment changes to catch issues early.
+</Step>
+
+<Step title="Use fixed seeds">
+All experiments accept a `--seed` parameter. Use it for reproducible results:
+
+```bash
+python scripts/run_workflow.py --seed 42 --experiment baseline
+```
+</Step>
+
+</Steps>
+
+<Tip>
+Keep a copy of your `requirements.txt` with each experiment log for full reproducibility.
+</Tip>

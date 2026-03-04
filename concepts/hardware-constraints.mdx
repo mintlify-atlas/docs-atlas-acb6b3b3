@@ -1,0 +1,415 @@
+---
+title: "Hardware Constraints"
+description: "Modeling and simulating memory, compute, and latency constraints in hardware-aware neural networks"
+---
+
+## Overview
+
+The hardware simulation module (`hardware_simulation.py`) provides tools to model and enforce realistic hardware constraints during training and inference. This enables experimentation with resource-constrained scenarios without requiring specialized hardware.
+
+<Info>
+These simulations are **approximations** designed for comparative studies and architecture exploration, not precise hardware predictions.
+</Info>
+
+## Hardware Simulation Configuration
+
+Constraints are specified through the `HardwareSimulationConfig` dataclass:
+
+```python hardware_simulation.py:17-24
+@dataclass
+class HardwareSimulationConfig:
+    enabled: bool = False
+    max_memory_mb: float = 512.0
+    compute_speed_factor: float = 1.0
+    precision_mode: str = "float32"  # float32 | float16 | int8
+    batch_size_limit: int = 128
+```
+
+### Configuration Parameters
+
+<ParamField path="enabled" type="bool" default="False">
+  Enable hardware constraint enforcement
+</ParamField>
+
+<ParamField path="max_memory_mb" type="float" default="512.0">
+  Maximum memory budget in megabytes for parameters and activations
+</ParamField>
+
+<ParamField path="compute_speed_factor" type="float" default="1.0">
+  Artificial slowdown multiplier (1.0 = no slowdown, 2.0 = 2x slower)
+</ParamField>
+
+<ParamField path="precision_mode" type="string" default="float32">
+  Numeric precision mode: `float32`, `float16`, or `int8`
+</ParamField>
+
+<ParamField path="batch_size_limit" type="int" default="128">
+  Hard upper bound on batch size regardless of memory
+</ParamField>
+
+## Memory Estimation
+
+Memory consumption is split into two components: **parameter memory** and **activation memory**.
+
+### Parameter Memory
+
+Parameter memory is constant and depends only on model architecture and precision:
+
+```python hardware_simulation.py:42-44
+def estimate_parameter_memory_mb(model: Any, precision_mode: str = "float32") -> float:
+    total_params = sum(_layer_param_count(layer) for layer in getattr(model, "layers", []))
+    return (total_params * _dtype_bytes(precision_mode)) / (1024 ** 2)
+```
+
+**Bytes per parameter by precision:**
+
+<CardGroup cols={3}>
+  <Card title="float32" icon="1">
+    4 bytes per parameter
+  </Card>
+  <Card title="float16" icon="2">
+    2 bytes per parameter
+  </Card>
+  <Card title="int8" icon="3">
+    1 byte per parameter
+  </Card>
+</CardGroup>
+
+### Activation Memory
+
+Activation memory scales linearly with batch size:
+
+```python hardware_simulation.py:47-58
+def estimate_activation_memory_mb(model: Any, batch_size: int, precision_mode: str = "float32") -> float:
+    if not hasattr(model, "layer_sizes"):
+        return 0.0
+
+    dtype_bytes = _dtype_bytes(precision_mode)
+    activation_elements = 0
+
+    # input + each layer output
+    for width in model.layer_sizes:
+        activation_elements += int(batch_size) * int(width)
+
+    return (activation_elements * dtype_bytes) / (1024 ** 2)
+```
+
+<Note>
+This estimate includes the input and each layer's output but excludes intermediate gradient storage, making it a conservative lower bound.
+</Note>
+
+### Total Memory Calculation
+
+```python hardware_simulation.py:61-64
+def estimate_total_memory_mb(model: Any, batch_size: int, precision_mode: str = "float32") -> float:
+    return estimate_parameter_memory_mb(model, precision_mode) + estimate_activation_memory_mb(
+        model, batch_size, precision_mode
+    )
+```
+
+## Memory Example: 784-64-10 Network
+
+Let's calculate memory for the default Fashion-MNIST architecture:
+
+**Parameters:**
+- Layer 1: (784 × 64) + 64 = 50,240
+- Layer 2: (64 × 10) + 10 = 650
+- **Total: 50,890 parameters**
+
+**Activations (batch_size=32):**
+- Input: 32 × 784 = 25,088
+- Hidden: 32 × 64 = 2,048
+- Output: 32 × 10 = 320
+- **Total: 27,456 elements**
+
+**Memory in float32:**
+- Parameters: 50,890 × 4 = 203,560 bytes ≈ **0.194 MB**
+- Activations: 27,456 × 4 = 109,824 bytes ≈ **0.105 MB**
+- **Total: ~0.3 MB**
+
+**Memory in float16:**
+- Parameters: 50,890 × 2 ≈ **0.097 MB**
+- Activations: 27,456 × 2 ≈ **0.052 MB**
+- **Total: ~0.15 MB** (50% reduction)
+
+**Memory in int8:**
+- Parameters: 50,890 × 1 ≈ **0.048 MB**
+- Activations: 27,456 × 1 ≈ **0.026 MB**
+- **Total: ~0.075 MB** (75% reduction)
+
+<Check>
+These small values allow experimentation on severely constrained devices or testing memory pressure with larger architectures.
+</Check>
+
+## Adaptive Batch Size
+
+When memory constraints are active, the system automatically reduces batch size using binary search:
+
+```python hardware_simulation.py:67-92
+def adjust_batch_size_to_memory(
+    model: Any,
+    requested_batch_size: int,
+    max_memory_mb: float,
+    precision_mode: str = "float32",
+    batch_size_limit: int = 128,
+) -> int:
+    capped_batch = max(1, min(int(requested_batch_size), int(batch_size_limit)))
+
+    if estimate_total_memory_mb(model, capped_batch, precision_mode) <= max_memory_mb:
+        return capped_batch
+
+    low, high = 1, capped_batch
+    feasible = 0
+
+    while low <= high:
+        mid = (low + high) // 2
+        memory = estimate_total_memory_mb(model, mid, precision_mode)
+        if memory <= max_memory_mb:
+            feasible = mid
+            low = mid + 1
+        else:
+            high = mid - 1
+
+    return feasible
+```
+
+### Algorithm Properties
+
+<Steps>
+  <Step title="Cap to limit">
+    First enforce the hard `batch_size_limit` cap
+  </Step>
+  <Step title="Quick check">
+    If requested batch fits in memory, return immediately
+  </Step>
+  <Step title="Binary search">
+    Find largest feasible batch size using binary search (O(log n))
+  </Step>
+  <Step title="Fallback">
+    If no feasible size found, return 0 (caller must handle)
+  </Step>
+</Steps>
+
+<Warning>
+If even batch_size=1 exceeds memory, the function returns 0. The caller should emit a warning and either abort or proceed with batch_size=1 anyway.
+</Warning>
+
+## Compute Slowdown Simulation
+
+To simulate slower hardware (e.g., edge devices, low-power CPUs), the system can artificially delay execution:
+
+```python hardware_simulation.py:99-106
+def apply_compute_slowdown(elapsed_seconds: float, compute_speed_factor: float) -> float:
+    if compute_speed_factor <= 1.0:
+        return 0.0
+
+    delay = elapsed_seconds * (compute_speed_factor - 1.0)
+    time.sleep(delay)
+    return delay
+```
+
+**Example scenarios:**
+
+| `compute_speed_factor` | Interpretation | If training takes 10s |
+|------------------------|----------------|-----------------------|
+| 1.0 | No slowdown | 10s (no added delay) |
+| 1.5 | 50% slower | 15s (5s added delay) |
+| 2.0 | 2x slower | 20s (10s added delay) |
+| 3.0 | 3x slower | 30s (20s added delay) |
+
+<Info>
+This is a **linear model** that assumes compute time scales proportionally. Real hardware differences are more complex (cache effects, instruction sets, etc.).
+</Info>
+
+## Constraint Enforcement
+
+The `prepare_hardware_constrained_run` function orchestrates all constraint checks:
+
+```python hardware_simulation.py:108-157
+def prepare_hardware_constrained_run(
+    model: Any,
+    requested_batch_size: int,
+    simulation_config: HardwareSimulationConfig,
+) -> Dict[str, Any]:
+    if not simulation_config.enabled:
+        return {
+            "enabled": False,
+            "batch_size": requested_batch_size,
+            "warnings": [],
+        }
+
+    warnings: List[str] = []
+    precision = simulation_config.precision_mode
+    adjusted_batch_size = adjust_batch_size_to_memory(
+        model=model,
+        requested_batch_size=requested_batch_size,
+        max_memory_mb=simulation_config.max_memory_mb,
+        precision_mode=precision,
+        batch_size_limit=simulation_config.batch_size_limit,
+    )
+
+    if adjusted_batch_size == 0:
+        warnings.append(
+            "Model cannot run under current memory and precision constraints; even batch_size=1 exceeds max_memory_mb."
+        )
+        adjusted_batch_size = 1
+
+    projected_memory = estimate_total_memory_mb(model, adjusted_batch_size, precision)
+
+    if projected_memory > simulation_config.max_memory_mb:
+        warnings.append(
+            f"Projected memory ({projected_memory:.4f} MB) exceeds limit ({simulation_config.max_memory_mb:.4f} MB)."
+        )
+
+    if adjusted_batch_size < requested_batch_size:
+        warnings.append(
+            f"Batch size reduced from {requested_batch_size} to {adjusted_batch_size} due to memory constraints."
+        )
+
+    apply_precision_constraint(model, precision)
+
+    return {
+        "enabled": True,
+        "batch_size": adjusted_batch_size,
+        "precision_mode": precision,
+        "estimated_memory_mb": round(projected_memory, 6),
+        "warnings": warnings,
+    }
+```
+
+### Return Structure
+
+The function returns a dictionary with:
+
+<ResponseField name="enabled" type="bool">
+  Whether constraints were applied
+</ResponseField>
+
+<ResponseField name="batch_size" type="int">
+  Adjusted batch size (may be smaller than requested)
+</ResponseField>
+
+<ResponseField name="precision_mode" type="string">
+  Applied precision mode
+</ResponseField>
+
+<ResponseField name="estimated_memory_mb" type="float">
+  Projected memory consumption
+</ResponseField>
+
+<ResponseField name="warnings" type="list">
+  List of constraint violation messages
+</ResponseField>
+
+## Training with Constraints
+
+The complete training flow with hardware constraints:
+
+```python hardware_simulation.py:159-193
+def run_training_with_hardware_constraints(
+    model: Any,
+    X,
+    y,
+    epochs: int,
+    alpha: float,
+    batch_size: int,
+    seed: int,
+    simulation_config: HardwareSimulationConfig,
+) -> Dict[str, Any]:
+    setup = prepare_hardware_constrained_run(model, batch_size, simulation_config)
+    effective_batch_size = int(setup["batch_size"])
+
+    start = time.perf_counter()
+    history = model.fit(
+        X,
+        y,
+        epochs=epochs,
+        alpha=alpha,
+        batch_size=effective_batch_size,
+        seed=seed,
+    )
+    elapsed = time.perf_counter() - start
+    added_delay = apply_compute_slowdown(elapsed, simulation_config.compute_speed_factor)
+
+    result = {
+        "setup": setup,
+        "training_time_s": round(elapsed, 6),
+        "artificial_delay_s": round(added_delay, 6),
+        "effective_time_s": round(elapsed + added_delay, 6),
+        "final_accuracy": round(float(history["accuracy"][-1]), 6),
+        "final_loss": round(float(history["loss"][-1]), 6),
+    }
+    return result
+```
+
+## Example Usage
+
+```python
+from hardware_simulation import HardwareSimulationConfig, run_training_with_hardware_constraints
+from student import NeuralNetwork
+
+# Create a constrained configuration
+config = HardwareSimulationConfig(
+    enabled=True,
+    max_memory_mb=1.0,  # Very tight: 1 MB limit
+    compute_speed_factor=2.0,  # Simulate 2x slower CPU
+    precision_mode="float16",  # Use half precision
+    batch_size_limit=64
+)
+
+model = NeuralNetwork(layer_sizes=[784, 64, 10], activations=["relu", "softmax"])
+
+result = run_training_with_hardware_constraints(
+    model=model,
+    X=X_train,
+    y=y_train,
+    epochs=5,
+    alpha=0.1,
+    batch_size=32,  # Will be adjusted down if needed
+    seed=42,
+    simulation_config=config
+)
+
+print(f"Adjusted batch size: {result['setup']['batch_size']}")
+print(f"Actual training time: {result['training_time_s']:.2f}s")
+print(f"Simulated time: {result['effective_time_s']:.2f}s")
+print(f"Warnings: {result['setup']['warnings']}")
+```
+
+## Design Motivations
+
+<AccordionGroup>
+  <Accordion title="Why simulate instead of using real hardware?">
+    - **Accessibility:** Enables constraint experiments without specialized hardware
+    - **Reproducibility:** Software-based limits are deterministic and portable
+    - **Comparative studies:** Easy to sweep parameters and compare trade-offs
+    - **Cost:** No need for edge devices, low-power boards, or mobile hardware
+  </Accordion>
+
+  <Accordion title="What are the limitations?">
+    - **No cache modeling:** Real hardware has complex cache hierarchies
+    - **No instruction-level effects:** SIMD, vectorization, and compiler optimizations aren't modeled
+    - **Linear slowdown model:** Real compute differences are non-linear
+    - **No power/thermal modeling:** Energy estimates are coarse (see benchmarking)
+    - **Conservative memory:** Doesn't account for Python overhead or gradient storage
+  </Accordion>
+
+  <Accordion title="When to use hardware constraints?">
+    - Exploring batch size vs. accuracy trade-offs
+    - Testing architecture changes under memory budgets
+    - Comparing precision modes (float32 vs. float16 vs. int8)
+    - Prototyping edge deployment scenarios
+    - Educational demonstrations of resource constraints
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Precision Modes" icon="sliders" href="/concepts/precision-modes">
+    Deep dive into float32, float16, and int8 implementations
+  </Card>
+  <Card title="Reproducibility" icon="fingerprint" href="/concepts/reproducibility">
+    Ensuring deterministic results across runs
+  </Card>
+</CardGroup>

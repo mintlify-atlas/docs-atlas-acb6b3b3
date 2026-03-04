@@ -1,0 +1,155 @@
+---
+title: 'inference'
+description: 'Inference-only CLI pipeline with optional ONNX export'
+---
+
+## Overview
+
+The `inference.py` module provides a command-line interface for running inference on trained models with configurable precision. It supports loading checkpoints, generating inference reports, and exporting models to ONNX format.
+
+## main
+
+Entry point for the inference CLI that loads weights, runs inference, and optionally exports to ONNX.
+
+```python
+def main() -> None
+```
+
+### Behavior
+
+1. **Model Initialization**: Creates `NeuralNetwork` with fixed architecture `[784, 64, 10]` and activations `["relu", "softmax"]`
+2. **Weight Loading**: Loads trained weights from `.npz` checkpoint file
+3. **Inference Execution**: Generates synthetic test data and runs forward pass
+4. **Report Generation**: Creates detailed inference report with metrics
+5. **Optional ONNX Export**: Exports model to ONNX format if requested
+
+## CLI Usage
+
+Run inference from the command line:
+
+```bash
+python inference.py --weights experiments/checkpoints/model_v1.npz
+```
+
+```bash
+python inference.py --weights model.npz --precision float16 --batch-size 128
+```
+
+```bash
+python inference.py --weights model.npz --export-onnx
+```
+
+### CLI Arguments
+
+<ParamField path="--weights" type="string" required>
+  Path to `.npz` checkpoint file containing trained model weights
+</ParamField>
+
+<ParamField path="--precision" type="string" default="float32">
+  Inference precision mode
+  
+  **Options**: `float32`, `float16`, `int8`
+</ParamField>
+
+<ParamField path="--batch-size" type="int" default="64">
+  Number of samples in synthetic test batch
+</ParamField>
+
+<ParamField path="--export-onnx" type="flag">
+  Export model to ONNX format at `exports/model.onnx`
+</ParamField>
+
+## Inference Report Format
+
+The `inference_report` function (from `deployment` module) generates a JSON report with the following structure:
+
+```json
+{
+  "batch_size": 64,
+  "precision": "float32",
+  "inference_time_ms": 2.34,
+  "throughput_samples_per_sec": 27350.4,
+  "memory_usage_mb": 1.23,
+  "model_size_bytes": 51200,
+  "predictions_shape": [64, 10]
+}
+```
+
+### Report Fields
+
+<ResponseField name="batch_size" type="int">
+  Number of samples processed
+</ResponseField>
+
+<ResponseField name="precision" type="string">
+  Precision mode used for inference
+</ResponseField>
+
+<ResponseField name="inference_time_ms" type="float">
+  Time taken for forward pass in milliseconds
+</ResponseField>
+
+<ResponseField name="throughput_samples_per_sec" type="float">
+  Number of samples processed per second
+</ResponseField>
+
+<ResponseField name="memory_usage_mb" type="float">
+  Memory footprint during inference
+</ResponseField>
+
+<ResponseField name="model_size_bytes" type="int">
+  Size of model parameters in bytes
+</ResponseField>
+
+<ResponseField name="predictions_shape" type="list[int]">
+  Shape of output predictions array
+</ResponseField>
+
+## Example Output
+
+```bash
+$ python inference.py --weights model.npz --precision float16
+```
+
+```json
+{
+  "batch_size": 64,
+  "precision": "float16",
+  "inference_time_ms": 1.87,
+  "throughput_samples_per_sec": 34224.6,
+  "memory_usage_mb": 0.62,
+  "model_size_bytes": 25600,
+  "predictions_shape": [64, 10]
+}
+```
+
+```bash
+$ python inference.py --weights model.npz --export-onnx
+```
+
+```
+Exported ONNX model to exports/model.onnx
+```
+
+## Helper Functions
+
+### _load_npz_weights
+
+Loads weights from NumPy `.npz` archive into model.
+
+```python
+def _load_npz_weights(model: NeuralNetwork, weights_path: str) -> None
+```
+
+<ParamField path="model" type="NeuralNetwork" required>
+  Model instance to load weights into
+</ParamField>
+
+<ParamField path="weights_path" type="string" required>
+  Path to `.npz` checkpoint file
+</ParamField>
+
+## Related
+
+- [train](/api/train) - Train models and create checkpoints
+- [benchmark](/api/benchmark) - Measure inference performance metrics

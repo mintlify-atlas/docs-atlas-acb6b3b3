@@ -1,0 +1,253 @@
+---
+title: "Statistical Analysis"
+description: "Run repeated benchmarks with confidence intervals and generate Pareto frontier plots"
+---
+
+## Overview
+
+The statistical analysis module provides tools for running repeated benchmarks, computing statistical aggregates with confidence intervals, and visualizing tradeoffs through Pareto frontier plots.
+
+## run_repeated_benchmarks
+
+Runs multiple benchmark iterations across different precision modes and computes statistical aggregates.
+
+### Parameters
+
+<ParamField path="layer_sizes" type="list[int]" required>
+  List of layer dimensions for the neural network.
+</ParamField>
+
+<ParamField path="activations" type="list[str]" required>
+  List of activation functions for each layer.
+</ParamField>
+
+<ParamField path="precision_modes" type="list[str]" required>
+  List of precision modes to benchmark (e.g., `["float32", "float16", "int8"]`).
+</ParamField>
+
+<ParamField path="batch_size" type="int" required>
+  Batch size for training and inference.
+</ParamField>
+
+<ParamField path="n_samples" type="int" required>
+  Number of samples in the dataset.
+</ParamField>
+
+<ParamField path="epochs" type="int" required>
+  Number of training epochs per benchmark run.
+</ParamField>
+
+<ParamField path="repeats" type="int" required>
+  Number of times to repeat each benchmark configuration.
+</ParamField>
+
+<ParamField path="seed" type="int" required>
+  Base random seed. Each repeat uses `seed + repeat_index`.
+</ParamField>
+
+<ParamField path="output_dir" type="Path" optional>
+  Directory for output files. Defaults to repository root + `benchmarks/statistical`.
+</ParamField>
+
+### Returns
+
+List of summary statistics dictionaries, one per precision mode. Each dictionary contains:
+
+- `precision_mode` (str): Precision mode
+- `repeats` (int): Number of repeats
+- `train_time_mean` (float): Mean training time per epoch (seconds)
+- `train_time_std` (float): Standard deviation of training time
+- `train_time_ci95` (float): 95% confidence interval for training time
+- `latency_mean` (float): Mean inference latency per sample (seconds)
+- `latency_std` (float): Standard deviation of latency
+- `latency_ci95` (float): 95% confidence interval for latency
+- `memory_mean` (float): Mean peak memory usage (MB)
+- `memory_std` (float): Standard deviation of memory
+- `memory_ci95` (float): 95% confidence interval for memory
+- `accuracy_mean` (float): Mean final training accuracy
+- `accuracy_std` (float): Standard deviation of accuracy
+- `accuracy_ci95` (float): 95% confidence interval for accuracy
+- `energy_mean` (float): Mean energy per epoch (Joules)
+- `energy_std` (float): Standard deviation of energy
+- `energy_ci95` (float): 95% confidence interval for energy
+
+### Output Files
+
+The function creates the following files in `output_dir`:
+
+1. **raw_runs.csv** - Raw data from all benchmark runs
+2. **summary_stats.csv** - Aggregated statistics with confidence intervals
+3. **summary_stats.json** - Same summary data in JSON format
+4. **accuracy_vs_latency.png** - Scatter plot of accuracy vs latency
+5. **accuracy_vs_energy.png** - Scatter plot of accuracy vs energy
+6. **accuracy_vs_memory.png** - Scatter plot of accuracy vs memory
+7. **pareto_frontier.png** - Pareto frontier plot showing optimal tradeoffs
+
+### Example
+
+```python
+from statistical_analysis import run_repeated_benchmarks
+from pathlib import Path
+
+summary = run_repeated_benchmarks(
+    layer_sizes=[784, 128, 64, 10],
+    activations=["relu", "relu", "softmax"],
+    precision_modes=["float32", "float16", "int8"],
+    batch_size=32,
+    n_samples=1000,
+    epochs=10,
+    repeats=5,
+    seed=42,
+    output_dir=Path("benchmarks/my_analysis")
+)
+
+for stat in summary:
+    mode = stat["precision_mode"]
+    acc = stat["accuracy_mean"]
+    acc_ci = stat["accuracy_ci95"]
+    lat = stat["latency_mean"]
+    print(f"{mode}: accuracy={acc:.4f}±{acc_ci:.4f}, latency={lat:.6f}s")
+```
+
+## Statistical Functions
+
+These helper functions are used internally but can be useful for custom analysis.
+
+### _ci95
+
+Computes the 95% confidence interval for a list of values.
+
+**Parameters:**
+- `values` (list[float]): Sample values
+
+**Returns:** float - Half-width of the 95% confidence interval using t-distribution approximation (1.96 × SEM)
+
+**Formula:** `1.96 × (std_dev / sqrt(n))`
+
+### _save_csv
+
+Saves a list of dictionaries to CSV format.
+
+**Parameters:**
+- `rows` (list[dict]): Data rows
+- `path` (Path): Output file path
+
+**Returns:** None
+
+## Visualization Functions
+
+### _save_tradeoff_plots
+
+Generates scatter plots showing tradeoffs between accuracy and other metrics.
+
+**Parameters:**
+- `summary_rows` (list[dict]): Summary statistics from benchmarks
+- `out_dir` (Path): Output directory
+
+**Returns:** None
+
+**Plots generated:**
+- Accuracy vs Latency
+- Accuracy vs Energy
+- Accuracy vs Memory
+
+### _save_pareto_plot
+
+Generates a Pareto frontier plot for accuracy vs latency tradeoffs.
+
+**Parameters:**
+- `summary_rows` (list[dict]): Summary statistics from benchmarks
+- `out_dir` (Path): Output directory
+
+**Returns:** None
+
+**Description:** Identifies and plots the Pareto frontier - configurations that are not dominated by any other configuration (i.e., no other config has both better accuracy and lower latency).
+
+## Understanding the Results
+
+### Confidence Intervals
+
+The 95% confidence interval (CI) indicates that if you repeated the experiment many times, approximately 95% of the computed means would fall within `mean ± CI`. Smaller CIs indicate more reliable estimates.
+
+### Pareto Frontier
+
+The Pareto frontier shows configurations that represent optimal tradeoffs. A configuration is on the frontier if:
+- No other configuration has both higher accuracy AND lower latency
+- It represents a meaningful choice depending on your priorities
+
+Configurations not on the frontier are strictly dominated and should generally be avoided.
+
+### Example Interpretation
+
+```python
+summary = run_repeated_benchmarks(...)
+float32_stats = summary[0]  # Assuming float32 is first
+
+print(f"Training time: {float32_stats['train_time_mean']:.4f} "
+      f"± {float32_stats['train_time_ci95']:.4f}s")
+print(f"Accuracy: {float32_stats['accuracy_mean']:.2%} "
+      f"± {float32_stats['accuracy_ci95']:.2%}")
+```
+
+## CLI Usage
+
+Run statistical benchmarks from command line:
+
+```bash
+python statistical_analysis.py --repeats 10 --seed 42
+```
+
+**Arguments:**
+- `--repeats`: Number of repetitions (default: 5)
+- `--seed`: Random seed (default: 42)
+
+## Complete Workflow Example
+
+```python
+from statistical_analysis import run_repeated_benchmarks
+from pathlib import Path
+import json
+
+# Run comprehensive benchmark
+results = run_repeated_benchmarks(
+    layer_sizes=[32, 64, 4],
+    activations=["relu", "softmax"],
+    precision_modes=["float32", "float16", "int8"],
+    batch_size=32,
+    n_samples=256,
+    epochs=5,
+    repeats=10,
+    seed=123,
+    output_dir=Path("results/statistical")
+)
+
+# Find best configuration for each metric
+best_accuracy = max(results, key=lambda x: x["accuracy_mean"])
+best_latency = min(results, key=lambda x: x["latency_mean"])
+best_memory = min(results, key=lambda x: x["memory_mean"])
+
+print("Best Configurations:")
+print(f"  Accuracy: {best_accuracy['precision_mode']} "
+      f"({best_accuracy['accuracy_mean']:.2%})")
+print(f"  Latency: {best_latency['precision_mode']} "
+      f"({best_latency['latency_mean']:.6f}s)")
+print(f"  Memory: {best_memory['precision_mode']} "
+      f"({best_memory['memory_mean']:.2f} MB)")
+
+# Load raw runs for deeper analysis
+with open("results/statistical/summary_stats.json") as f:
+    summary = json.load(f)
+    
+for stat in summary:
+    reliability = stat["accuracy_ci95"] / stat["accuracy_mean"]
+    print(f"{stat['precision_mode']}: "
+          f"relative CI = {reliability:.2%}")
+```
+
+## Notes
+
+- Uses the `benchmark_one_setup` function from the benchmark module for individual runs
+- All plots are saved at 140 DPI for high quality
+- Raw data is preserved in CSV format for custom post-processing
+- Confidence intervals use the normal approximation (1.96 × SEM)
+- Pareto frontier calculation uses non-domination criterion on latency (minimize) and accuracy (maximize)

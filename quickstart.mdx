@@ -1,80 +1,240 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart
+description: Train your first hardware-aware neural network in under 5 minutes
 ---
 
-## Get started in three steps
+This guide gets you from zero to a trained model with benchmark results. You'll use synthetic data for fast iteration and see how the framework exposes hardware trade-offs.
 
-Get your documentation site running locally and make your first customization.
+## Before you begin
 
-### Step 1: Set up your local environment
+You need Python 3.8+ and pip installed on your system.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+## Train your first model
 
-### Step 2: Deploy your changes
+<Steps>
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+<Step title="Clone the repository">
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+Clone the project and navigate to the source directory:
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
+```bash
+git clone <repository-url>
+cd source
+```
 
-### Step 3: Go live
+</Step>
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
+<Step title="Install dependencies">
+
+Install the required packages:
+
+```bash
+pip install -r requirements.txt
+```
+
+This installs NumPy, pandas, matplotlib, psutil, and other core dependencies.
+
+</Step>
+
+<Step title="Verify your environment">
+
+Run the environment verification script to confirm everything is set up correctly:
+
+```bash
+python scripts/verify_environment.py
+```
+
+You should see output showing your Python version, platform, and package status:
+
+```
+Python: 3.11.0
+Platform: Linux-5.15.0-x86_64
+
+Required packages:
+  - numpy: OK (1.26.4)
+  - matplotlib: OK (3.8.4)
+  - psutil: OK (5.9.8)
+  - requests: OK (2.32.3)
+  - tqdm: OK (4.66.4)
+```
+
+<Note>
+The dataset status may show files as unavailable—that's expected for synthetic mode.
+</Note>
+
+</Step>
+
+<Step title="Run your first training workflow">
+
+Execute the full workflow with synthetic data:
+
+```bash
+python scripts/run_workflow.py --mode full --experiment baseline --stats-repeats 5
+```
+
+This command:
+- Trains a neural network with the baseline configuration
+- Runs benchmarks to measure latency and memory
+- Performs statistical analysis over 5 repeated runs
+
+<Note>
+The baseline experiment uses synthetic data by default, so no dataset download is required.
+</Note>
+
+</Step>
+
+<Step title="Review your results">
+
+After training completes, you'll find:
+
+- **Checkpoints**: Saved model weights in `experiments/logs/`
+- **Metrics**: Training loss, validation accuracy, and convergence data
+- **Benchmarks**: Latency measurements, memory footprint, and throughput statistics
+- **Reports**: Statistical summaries and artifacts in `artifacts/`
+
+The workflow prints summary statistics to the console, including:
+- Parameter count vs. memory footprint
+- Inference latency across different batch sizes
+- Accuracy under various precision constraints
+
+</Step>
+
+</Steps>
+
+## What you just built
+
+You trained a feed-forward neural network that exposes system-level trade-offs:
+
+- **Parameter count vs. memory**: See how model size affects RAM usage
+- **Precision vs. accuracy**: Compare float32, float16, and int8 representations
+- **Batch size vs. latency**: Understand throughput vs. per-sample inference time
+
+The baseline configuration uses a simple architecture designed for CPU execution and reproducible experiments.
 
 ## Next steps
 
-Now that you have your docs running, explore these key features:
-
 <CardGroup cols={2}>
 
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
+<Card title="Train with real data" icon="database" href="#train-with-fashion-mnist">
+  Download Fashion-MNIST and train on production-like data
 </Card>
 
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
+<Card title="Run specific stages" icon="play" href="#stage-specific-runs">
+  Execute training, benchmarking, or analysis independently
 </Card>
 
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
+<Card title="Customize experiments" icon="sliders" href="/api/config">
+  Modify layer sizes, precision, and hardware constraints
 </Card>
 
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
+<Card title="Understand the architecture" icon="sitemap" href="/concepts/architecture">
+  Learn how the framework is structured
 </Card>
 
 </CardGroup>
 
-<Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
-</Note>
+## Train with Fashion-MNIST
+
+To train on real data instead of synthetic samples:
+
+<Steps>
+
+<Step title="Download the dataset">
+
+```bash
+python scripts/download_fashion_mnist.py --out-dir "Neural Network from Scratch/task/Data"
+```
+
+This downloads the Fashion-MNIST CSV files and verifies their integrity.
+
+</Step>
+
+<Step title="Run the workflow with real data">
+
+```bash
+python scripts/run_workflow.py --mode full --experiment real_fashion_mnist --stats-repeats 5
+```
+
+The `real_fashion_mnist` experiment configuration uses the downloaded dataset instead of synthetic data.
+
+</Step>
+
+</Steps>
+
+## Stage-specific runs
+
+You can run individual stages of the workflow independently:
+
+<CodeGroup>
+
+```bash Training only
+python scripts/run_workflow.py --mode train --experiment baseline
+```
+
+```bash Benchmarking only
+python scripts/run_workflow.py --mode benchmark --stats-repeats 7
+```
+
+```bash Custom seed
+python scripts/run_workflow.py --mode full --experiment baseline --seed 123
+```
+
+</CodeGroup>
+
+<Warning>
+Benchmarking requires a trained model checkpoint. Run training first if no checkpoint exists.
+</Warning>
+
+## Understanding the workflow modes
+
+The `run_workflow.py` script supports three modes:
+
+| Mode | What it does | Use case |
+|------|-------------|----------|
+| `train` | Trains the model and saves checkpoints | Iterate on model architecture |
+| `benchmark` | Runs inference benchmarks and statistical analysis | Profile performance changes |
+| `full` | Executes train → benchmark → analysis | End-to-end experiment |
+
+## Troubleshooting
+
+<AccordionGroup>
+
+<Accordion title="Import errors after installation">
+Ensure you're in the correct directory and Python can find the task modules:
+
+```bash
+cd source
+python -c "import sys; print(sys.path)"
+```
+
+The scripts automatically add the task directory to your Python path.
+</Accordion>
+
+<Accordion title="Out of memory during training">
+Reduce the batch size in your experiment configuration or use a smaller model architecture. The framework will show memory allocation spikes during forward/backward passes.
+</Accordion>
+
+<Accordion title="Dataset integrity check fails">
+If you're using real data, re-download the Fashion-MNIST files:
+
+```bash
+python scripts/download_fashion_mnist.py --out-dir "Neural Network from Scratch/task/Data"
+```
+
+For synthetic mode, no dataset files are required.
+</Accordion>
+
+</AccordionGroup>
+
+## Key concepts
+
+Before diving deeper, understand these core concepts:
+
+- **Synthetic mode**: Uses generated random data for fast, deterministic testing
+- **Experiment configs**: Pre-defined settings in `config.py` that control architecture and training
+- **Reproducibility**: All experiments use explicit seeds and fixed dependency versions
+- **Hardware constraints**: Simulated precision and memory limits without specialized hardware
+
+<Tip>
+The framework prioritizes transparency over raw performance—you can inspect every tensor operation and understand exactly what's happening.
+</Tip>

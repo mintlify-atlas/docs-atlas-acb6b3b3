@@ -1,0 +1,161 @@
+---
+title: "verify_environment.py"
+description: "Environment verification for reproducible research runs"
+---
+
+## Overview
+
+The `verify_environment.py` script validates that all required dependencies, packages, and datasets are properly installed and accessible before running experiments.
+
+**Location**: `scripts/verify_environment.py`
+
+## Usage
+
+```bash
+python scripts/verify_environment.py
+```
+
+No command-line arguments required. The script automatically checks all dependencies and reports their status.
+
+## Verification Checks
+
+### System Information
+
+- **Python Version**: Reports the active Python interpreter version
+- **Platform**: Displays the operating system and platform details
+
+### Required Packages
+
+Verifies installation and version of critical dependencies:
+
+- `numpy` - Numerical computing
+- `matplotlib` - Plotting and visualization
+- `psutil` - System and process utilities
+- `requests` - HTTP library
+- `tqdm` - Progress bars
+
+### Optional Packages
+
+Checks for optional dependencies:
+
+- `torch` - PyTorch deep learning framework
+- `pytest` - Testing framework
+
+### Dataset Status
+
+Validates Fashion-MNIST dataset availability:
+
+- **Training set**: Checks file existence and size
+- **Test set**: Checks file existence and size
+- Uses dataset configuration from `dataset_config.py`
+
+## Example Output
+
+```
+Python: 3.11.4
+Platform: Linux-5.15.0-1028-aws-x86_64-with-glibc2.35
+
+Required packages:
+  - numpy: OK (1.24.3)
+  - matplotlib: OK (3.7.1)
+  - psutil: OK (5.9.5)
+  - requests: OK (2.31.0)
+  - tqdm: OK (4.65.0)
+
+Optional packages:
+  - torch: OK (2.0.1)
+  - pytest: OK (7.4.0)
+
+Dataset status:
+  - fashion-mnist: train_exists=True size=30596944, test_exists=True size=5148144
+```
+
+## Exit Behavior
+
+The script **does not** exit with error codes. It reports all findings to stdout for manual review. This allows users to:
+
+- Identify missing packages
+- Verify version compatibility
+- Check dataset integrity
+- Diagnose environment issues before running experiments
+
+## Implementation Details
+
+### Module Checking
+
+Uses dynamic import to test package availability:
+
+```python
+importlib.import_module(name)
+```
+
+Extracts version information via `__version__` attribute when available.
+
+### Dataset Verification
+
+- Imports `FASHION_MNIST_SPEC` from `dataset_config.py`
+- Checks file existence using `Path.exists()`
+- Reports file size in bytes for integrity validation
+
+### Path Resolution
+
+- Automatically resolves repository root from script location
+- Adds task directory to `sys.path` for local imports
+- Uses `pathlib.Path` for cross-platform compatibility
+
+## Troubleshooting
+
+### Missing Package
+
+If a required package shows `MISSING`, install it:
+
+```bash
+pip install <package-name>
+```
+
+### Dataset Unavailable
+
+If dataset status shows `train_exists=False` or `test_exists=False`:
+
+1. Run the dataset download script
+2. Verify `dataset_config.py` paths are correct
+3. Check file permissions
+
+### Import Errors
+
+If `dataset_config` import fails:
+
+- Ensure you're running from the repository root
+- Verify the task directory structure exists
+- Check for syntax errors in `dataset_config.py`
+
+## Use Cases
+
+### Pre-Experiment Validation
+
+```bash
+python scripts/verify_environment.py
+```
+
+Run before starting experiments to catch environment issues early.
+
+### CI/CD Pipeline
+
+```bash
+python scripts/verify_environment.py > environment_report.txt
+```
+
+Capture environment state for debugging and reproducibility documentation.
+
+### Debugging Environment Issues
+
+```bash
+python scripts/verify_environment.py
+```
+
+Quickly diagnose missing dependencies or dataset problems when experiments fail.
+
+## Related
+
+- [run_workflow.py](/api/cli-workflow) - Experiment workflow orchestration
+- [Dataset Configuration](/api/dataset-config) - Dataset path configuration

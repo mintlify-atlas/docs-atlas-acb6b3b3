@@ -1,0 +1,432 @@
+---
+title: "Precision Modes"
+description: "Understanding float32, float16, and int8 precision modes and their trade-offs"
+---
+
+## Overview
+
+The model supports three numeric precision modes for inference: **float32** (full precision), **float16** (half precision), and **int8** (quantized). These modes trade numerical accuracy for reduced memory footprint and potentially faster computation.
+
+<Warning>
+Precision modes are **simulation-based** in this implementation. They approximate the behavior of native low-precision kernels but do not provide actual hardware acceleration.
+</Warning>
+
+## Precision Configuration
+
+Precision is controlled through the `PrecisionConfig` dataclass:
+
+```python config.py:6-11
+@dataclass
+class PrecisionConfig:
+    train_dtype: str = "float32"
+    infer_precision: str = "float32"  # float32 | float16 | int8
+    int8_clip_value: int = 127
+    seed: int = 42
+```
+
+<ParamField path="train_dtype" type="string" default="float32">
+  Data type used during training (always float32 in this implementation)
+</ParamField>
+
+<ParamField path="infer_precision" type="string" default="float32">
+  Precision mode for inference: `float32`, `float16`, or `int8`
+</ParamField>
+
+<ParamField path="int8_clip_value" type="int" default="127">
+  Maximum absolute value for int8 quantization (typically 127 for symmetric quantization)
+</ParamField>
+
+## Float32: Full Precision
+
+**IEEE 754 single-precision floating point**
+
+<Tabs>
+  <Tab title="Characteristics">
+    - **Storage:** 4 bytes per value
+    - **Range:** ±1.4e-45 to ±3.4e38
+    - **Precision:** ~7 decimal digits
+    - **Use case:** Training and high-accuracy inference
+  </Tab>
+  <Tab title="Trade-offs">
+    **Advantages:**
+    - Maximum numerical accuracy
+    - No quantization error
+    - Standard format with broad hardware support
+    
+    **Trade-offs:**
+    - Highest memory consumption
+    - Slower than lower precisions on specialized hardware
+    - May be overkill for inference after training
+  </Tab>
+</Tabs>
+
+Float32 is the **default mode** and used for all training. The forward pass operates entirely in float32:
+
+```python model.py:87-91
+def forward(self, x, training=False, precision=None):
+    selected_precision = self.infer_precision if precision is None else precision
+
+    if not training and selected_precision in {"float16", "int8"}:
+        return self._forward_with_precision(x.astype(np.float32), selected_precision)
+```
+
+## Float16: Half Precision
+
+**IEEE 754 half-precision floating point**
+
+<Tabs>
+  <Tab title="Characteristics">
+    - **Storage:** 2 bytes per value
+    - **Range:** ±6e-8 to ±65,504
+    - **Precision:** ~3 decimal digits
+    - **Use case:** Memory-constrained inference
+  </Tab>
+  <Tab title="Trade-offs">
+    **Advantages:**
+    - 50% memory reduction vs. float32
+    - Faster on GPUs with Tensor Cores
+    - Often negligible accuracy loss for inference
+    
+    **Trade-offs:**
+    - Reduced numeric range (can overflow/underflow)
+    - Less precise gradient accumulation (not used for training here)
+    - Requires careful scaling in some models
+  </Tab>
+</Tabs>
+
+### Float16 Implementation
+
+Float16 inference is implemented by casting weights and activations:
+
+```python model.py:82-84
+else:
+    dtype = np.float16 if precision == "float16" else np.float32
+    z = layer.forward(current.astype(dtype), weights=layer.weights.astype(dtype), bias=layer.bias.astype(dtype))
+    current = activation_forward(z, activation_name).astype(dtype)
+```
+
+<Steps>
+  <Step title="Cast inputs">
+    Convert layer input to float16
+  </Step>
+  <Step title="Cast parameters">
+    Convert weights and biases to float16
+  </Step>
+  <Step title="Compute in float16">
+    Matrix multiply and activation in half precision
+  </Step>
+  <Step title="Propagate float16">
+    Output remains in float16 for next layer
+  </Step>
+</Steps>
+
+<Note>
+This is a **simulation** that converts float32 to float16 in software. On real hardware with native float16 support (e.g., NVIDIA Tensor Cores), the speedup would be much more significant.
+</Note>
+
+### Float16 Accuracy Considerations
+
+For the Fashion-MNIST task, float16 typically shows minimal accuracy degradation:
+
+- Float32 test accuracy: ~88-90%
+- Float16 test accuracy: ~88-89% (0-1% drop)
+- Memory: 50% of float32
+
+## Int8: Quantized Precision
+
+**8-bit signed integer with dynamic quantization**
+
+<Tabs>
+  <Tab title="Characteristics">
+    - **Storage:** 1 byte per value
+    - **Range:** -128 to 127 (before scaling)
+    - **Precision:** Integer values only
+    - **Use case:** Extreme memory constraints, edge deployment
+  </Tab>
+  <Tab title="Trade-offs">
+    **Advantages:**
+    - 75% memory reduction vs. float32
+    - Potential for integer-only inference on specialized hardware
+    - Smaller model files for deployment
+    
+    **Trade-offs:**
+    - Quantization error can reduce accuracy (2-5% typical)
+    - Requires calibration for best results
+    - Per-tensor scaling adds overhead in software simulation
+    - Not suitable for training without sophisticated techniques
+  </Tab>
+</Tabs>
+
+### Int8 Quantization Scheme
+
+This implementation uses **dynamic symmetric quantization**:
+
+```python model.py:55-65
+def _quantize_to_int8(self, x):
+    max_abs = np.max(np.abs(x))
+    if max_abs == 0:
+        return np.zeros_like(x, dtype=np.int8), 1.0
+    scale = max_abs / float(self.int8_clip_value)
+    q = np.clip(np.round(x / scale), -self.int8_clip_value, self.int8_clip_value).astype(np.int8)
+    return q, scale
+
+@staticmethod
+def _dequantize_from_int8(q, scale):
+    return q.astype(np.float32) * np.float32(scale)
+```
+
+### Quantization Algorithm
+
+<Steps>
+  <Step title="Find max absolute value">
+    `max_abs = max(|x|)` across the entire tensor
+  </Step>
+  <Step title="Compute scale factor">
+    `scale = max_abs / 127` (maps max value to ±127)
+  </Step>
+  <Step title="Scale and round">
+    `q = round(x / scale)` to get integer values
+  </Step>
+  <Step title="Clip to range">
+    `q = clip(q, -127, 127)` to ensure valid int8
+  </Step>
+  <Step title="Dequantize for use">
+    `x_approx = q * scale` to convert back to float
+  </Step>
+</Steps>
+
+<Info>
+This is a **per-tensor** quantization scheme. More sophisticated approaches use per-channel quantization or learned quantization parameters for better accuracy.
+</Info>
+
+### Int8 Forward Pass
+
+Each layer operation involves quantization, computation, and dequantization:
+
+```python model.py:70-80
+if precision == "int8":
+    q_a, a_scale = self._quantize_to_int8(current)
+    q_w, w_scale = self._quantize_to_int8(layer.weights)
+    a_deq = self._dequantize_from_int8(q_a, a_scale)
+    w_deq = self._dequantize_from_int8(q_w, w_scale)
+    z = a_deq @ w_deq + layer.bias.astype(np.float32)
+    z_q, z_scale = self._quantize_to_int8(z)
+    z = self._dequantize_from_int8(z_q, z_scale)
+    a = activation_forward(z, activation_name)
+    a_q, a_scale = self._quantize_to_int8(a)
+    current = self._dequantize_from_int8(a_q, a_scale)
+```
+
+**Quantization points:**
+1. Quantize activations from previous layer
+2. Quantize current layer weights
+3. Dequantize both for matrix multiply
+4. Compute `z = a @ w + b` in float32
+5. Quantize pre-activation `z`
+6. Dequantize for activation function
+7. Apply activation (in float32)
+8. Quantize output activations for next layer
+
+<Warning>
+This implementation uses **quantize-dequantize** (fake quantization) where computation happens in float32. True int8 inference would use integer matrix multiplication, which is significantly faster on specialized hardware.
+</Warning>
+
+### Int8 Accuracy Impact
+
+Typical accuracy degradation for Fashion-MNIST:
+
+- Float32 baseline: ~88-90%
+- Int8 quantized: ~85-88% (2-5% drop)
+- Memory: 25% of float32
+
+The accuracy loss comes from:
+- Quantization error (rounding to nearest integer)
+- Clipping extreme values to [-127, 127]
+- Accumulated error through layer propagation
+
+<Tip>
+For better int8 accuracy, consider:
+- Post-training quantization with calibration data
+- Quantization-aware training (QAT)
+- Per-channel quantization instead of per-tensor
+- Learnable quantization parameters
+</Tip>
+
+## Memory Comparison
+
+For a 784-64-10 network (50,890 parameters):
+
+| Precision | Bytes per param | Total params size | Activations (B=32) | Total memory |
+|-----------|----------------|-------------------|--------------------|--------------|
+| float32   | 4              | 198 KB            | 105 KB             | **303 KB**   |
+| float16   | 2              | 99 KB             | 52 KB              | **151 KB** ↓50% |
+| int8      | 1              | 49 KB             | 26 KB              | **75 KB** ↓75% |
+
+<Check>
+These reductions are **additive** with batch size reductions for extreme memory constraints.
+</Check>
+
+## Precision Mode Usage
+
+### At Model Creation
+
+```python
+from config import PrecisionConfig
+from student import NeuralNetwork
+
+config = PrecisionConfig(
+    train_dtype="float32",
+    infer_precision="float16",  # Use float16 for inference
+    seed=42
+)
+
+model = NeuralNetwork(
+    layer_sizes=[784, 64, 10],
+    activations=["relu", "softmax"],
+    precision_config=config
+)
+```
+
+### Override at Inference Time
+
+```python
+# Model configured for float16, but override to int8
+predictions = model.predict(X_test, precision="int8")
+
+# Explicitly use float32 for critical inference
+accurate_preds = model.predict(X_critical, precision="float32")
+```
+
+### In Benchmarking
+
+```python
+from benchmark import benchmark_one_setup
+
+result = benchmark_one_setup(
+    layer_sizes=[784, 64, 10],
+    activations=["relu", "softmax"],
+    precision_mode="int8",  # Benchmark int8 performance
+    batch_size=32,
+    n_samples=512,
+    epochs=2,
+    seed=42
+)
+
+print(f"Int8 latency: {result['inference_latency_per_sample_s']:.6f}s")
+print(f"Int8 memory: {result['peak_memory_mb']:.3f} MB")
+```
+
+## Benchmark Comparison
+
+Typical benchmark results from `benchmark.py` on a modern CPU:
+
+```python
+# Example output
+[
+  {
+    "precision_mode": "float32",
+    "inference_latency_per_sample_s": 0.000142,
+    "peak_memory_mb": 1.234,
+    "final_train_accuracy": 0.891
+  },
+  {
+    "precision_mode": "float16",
+    "inference_latency_per_sample_s": 0.000138,  # ~3% faster
+    "peak_memory_mb": 0.687,  # 50% memory
+    "final_train_accuracy": 0.887  # -0.4% accuracy
+  },
+  {
+    "precision_mode": "int8",
+    "inference_latency_per_sample_s": 0.000151,  # Slower in simulation!
+    "peak_memory_mb": 0.412,  # 75% reduction
+    "final_train_accuracy": 0.863  # -2.8% accuracy
+  }
+]
+```
+
+<Note>
+Int8 can be **slower** in this software simulation due to quantization overhead. On real hardware with int8 acceleration (e.g., Intel VNNI, ARM dot-product), it would be significantly faster.
+</Note>
+
+## Design Decisions
+
+<AccordionGroup>
+  <Accordion title="Why train in float32 only?">
+    - **Stability:** Training requires high precision for gradient accumulation
+    - **Simplicity:** Mixed-precision training adds complexity
+    - **Scope:** This project focuses on inference-time precision trade-offs
+    - **Accuracy:** Float32 training → low-precision inference is the standard deployment pattern
+  </Accordion>
+
+  <Accordion title="Why dynamic quantization instead of static?">
+    - **No calibration required:** Dynamic quantization computes scale factors on-the-fly
+    - **Simpler implementation:** No need for calibration data or profiling
+    - **Trade-off:** Per-tensor overhead makes it slower than static quantization
+    - **Production note:** Static quantization is preferred for deployment
+  </Accordion>
+
+  <Accordion title="Why symmetric quantization?">
+    - **Simpler math:** Symmetric range [-127, 127] with zero at 0
+    - **No zero-point offset:** Reduces computation complexity
+    - **Trade-off:** Wastes a bit of range for asymmetric distributions
+    - **Alternative:** Asymmetric quantization uses the full [-128, 127] range
+  </Accordion>
+
+  <Accordion title="What about other precisions?">
+    - **bfloat16:** Brain floating point (16-bit with float32 range) not implemented
+    - **int4/int2:** Lower precision requires specialized kernel support
+    - **Mixed precision:** Per-layer precision could be added as an extension
+    - **Scope:** Current implementation covers the most common deployment scenarios
+  </Accordion>
+</AccordionGroup>
+
+## Limitations
+
+<Warning>
+These are **software simulations** that approximate low-precision behavior:
+
+- **No hardware acceleration:** Computation still happens in float32/int
+- **Overhead:** Quantization/dequantization adds latency in software
+- **Conservative:** Real optimized kernels can be much faster
+- **Portability:** Results may not match native low-precision implementations
+- **Accuracy differences:** Hardware quantization may have different rounding behavior
+</Warning>
+
+## When to Use Each Precision
+
+<CardGroup cols={3}>
+  <Card title="Float32" icon="1">
+    **Use when:**
+    - Maximum accuracy required
+    - Memory not constrained
+    - Training the model
+    - Debugging and development
+  </Card>
+  
+  <Card title="Float16" icon="2">
+    **Use when:**
+    - Moderate memory constraints
+    - Minimal accuracy loss acceptable
+    - Deploying to GPU with Tensor Cores
+    - Good balance for most use cases
+  </Card>
+  
+  <Card title="Int8" icon="3">
+    **Use when:**
+    - Extreme memory constraints
+    - Edge device deployment
+    - CPU with int8 instructions (VNNI, etc.)
+    - 2-5% accuracy loss acceptable
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Hardware Constraints" icon="microchip" href="/concepts/hardware-constraints">
+    Combine precision modes with memory constraints
+  </Card>
+  <Card title="Reproducibility" icon="fingerprint" href="/concepts/reproducibility">
+    Ensure consistent precision behavior across runs
+  </Card>
+</CardGroup>

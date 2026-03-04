@@ -1,0 +1,298 @@
+---
+title: 'benchmark'
+description: 'Performance benchmarking utilities for training and inference'
+---
+
+## Overview
+
+The `benchmark.py` module provides comprehensive performance profiling for neural network models, measuring training time, inference latency, throughput, memory usage, CPU utilization, and energy consumption.
+
+## run_benchmarks
+
+Runs a complete benchmark suite across multiple configurations and saves results to CSV.
+
+```python
+def run_benchmarks(
+    batch_sizes: list[int],
+    precision_modes: list[str],
+    model_sizes: list[list[int]],
+    activations: list[str] | None = None,
+    output_csv: str = "benchmark_results.csv",
+    n_samples: int = 512,
+    epochs: int = 2,
+    seed: int = 42,
+    enable_profiling: bool = False,
+) -> tuple[Path, list[dict]]
+```
+
+### Parameters
+
+<ParamField path="batch_sizes" type="list[int]" required>
+  List of batch sizes to benchmark, e.g., `[16, 32, 64]`
+</ParamField>
+
+<ParamField path="precision_modes" type="list[string]" required>
+  List of precision modes to test, e.g., `["float32", "float16", "int8"]`
+</ParamField>
+
+<ParamField path="model_sizes" type="list[list[int]]" required>
+  List of model architectures to benchmark, e.g., `[[784, 64, 10], [784, 128, 10]]`
+</ParamField>
+
+<ParamField path="activations" type="list[string]" default="['relu', 'softmax']">
+  Activation functions for each layer transition
+</ParamField>
+
+<ParamField path="output_csv" type="string" default="benchmark_results.csv">
+  Output CSV filename (saved to `benchmarks/` directory)
+</ParamField>
+
+<ParamField path="n_samples" type="int" default="512">
+  Number of synthetic samples to generate for benchmarking
+</ParamField>
+
+<ParamField path="epochs" type="int" default="2">
+  Number of training epochs per benchmark
+</ParamField>
+
+<ParamField path="seed" type="int" default="42">
+  Random seed for reproducible benchmarks
+</ParamField>
+
+<ParamField path="enable_profiling" type="bool" default="false">
+  Enable detailed profiling reports (requires `profiler` module)
+</ParamField>
+
+### Returns
+
+<ResponseField name="output_path" type="Path">
+  Path to the generated CSV file
+</ResponseField>
+
+<ResponseField name="results" type="list[dict]">
+  List of benchmark result dictionaries
+</ResponseField>
+
+### Example Usage
+
+```python
+from benchmark import run_benchmarks
+
+path, results = run_benchmarks(
+    batch_sizes=[16, 32, 64],
+    precision_modes=["float32", "float16"],
+    model_sizes=[[784, 64, 10], [784, 128, 64, 10]],
+    n_samples=1000,
+    epochs=3,
+    output_csv="my_benchmark.csv"
+)
+
+print(f"Saved {len(results)} results to {path}")
+```
+
+## Output Format
+
+Benchmark results are saved as CSV with the following columns:
+
+### Result Fields
+
+<ResponseField name="seed" type="int">
+  Random seed used for this benchmark run
+</ResponseField>
+
+<ResponseField name="layer_sizes" type="string">
+  Model architecture in `"AxBxC"` format (e.g., `"784x64x10"`)
+</ResponseField>
+
+<ResponseField name="precision_mode" type="string">
+  Precision used: `"float32"`, `"float16"`, or `"int8"`
+</ResponseField>
+
+<ResponseField name="batch_size" type="int">
+  Training batch size
+</ResponseField>
+
+<ResponseField name="epochs" type="int">
+  Number of training epochs
+</ResponseField>
+
+<ResponseField name="n_samples" type="int">
+  Total number of training samples
+</ResponseField>
+
+<ResponseField name="train_time_per_epoch_s" type="float">
+  Average training time per epoch in seconds (6 decimal places)
+</ResponseField>
+
+<ResponseField name="inference_latency_per_sample_s" type="float">
+  Average inference time per sample in seconds (8 decimal places)
+</ResponseField>
+
+<ResponseField name="batch_throughput_samples_per_s" type="float">
+  Number of samples processed per second during inference (3 decimal places)
+</ResponseField>
+
+<ResponseField name="peak_memory_mb" type="float">
+  Peak memory usage during training in megabytes (3 decimal places)
+</ResponseField>
+
+<ResponseField name="cpu_utilization_percent" type="float">
+  Average CPU utilization percentage during training (3 decimal places)
+</ResponseField>
+
+<ResponseField name="final_train_accuracy" type="float">
+  Final training accuracy after all epochs (6 decimal places)
+</ResponseField>
+
+<ResponseField name="energy_per_epoch_j" type="float">
+  Estimated energy consumption per epoch in joules (6 decimal places)
+</ResponseField>
+
+<ResponseField name="profiling_report" type="string" optional>
+  Path to detailed profiling report (only present if `enable_profiling=True`)
+</ResponseField>
+
+## Example CSV Output
+
+```csv
+seed,layer_sizes,precision_mode,batch_size,epochs,n_samples,train_time_per_epoch_s,inference_latency_per_sample_s,batch_throughput_samples_per_s,peak_memory_mb,cpu_utilization_percent,final_train_accuracy,energy_per_epoch_j
+42,784x64x10,float32,32,2,512,0.125000,0.00000234,42735.043,12.456,78.234,0.856000,0.015000
+42,784x64x10,float16,32,2,512,0.098000,0.00000187,53475.936,8.234,76.890,0.854000,0.011760
+42,784x128x10,float32,64,2,512,0.156000,0.00000289,34602.076,18.567,82.145,0.892000,0.018720
+```
+
+## CLI Usage
+
+Run benchmarks from the command line:
+
+```bash
+python benchmark.py
+```
+
+```bash
+python benchmark.py --seed 123 --output-csv custom_results.csv
+```
+
+### CLI Arguments
+
+<ParamField path="--seed" type="int" default="42">
+  Global seed for reproducible benchmark generation
+</ParamField>
+
+<ParamField path="--output-csv" type="string" default="benchmark_results.csv">
+  Output CSV filename (saved under `benchmarks/` directory)
+</ParamField>
+
+### Default Configuration
+
+When run from CLI, the benchmark uses these defaults:
+- **Batch sizes**: `[16, 32]`
+- **Precision modes**: `["float32", "float16", "int8"]`
+- **Model sizes**: `[[16, 32, 4], [16, 64, 4]]`
+- **Samples**: `256`
+- **Epochs**: `1`
+
+## Helper Functions
+
+### benchmark_one_setup
+
+Runs a single benchmark configuration and returns metrics.
+
+```python
+def benchmark_one_setup(
+    layer_sizes: list[int],
+    activations: list[str],
+    precision_mode: str,
+    batch_size: int,
+    n_samples: int = 512,
+    epochs: int = 2,
+    seed: int = 42,
+    enable_profiling: bool = False,
+) -> dict
+```
+
+Returns a single result dictionary with all benchmark metrics.
+
+### make_synthetic_data
+
+Generates synthetic training data for benchmarking.
+
+```python
+def make_synthetic_data(
+    n_samples: int,
+    n_features: int,
+    n_classes: int,
+    seed: int = 42
+) -> tuple[np.ndarray, np.ndarray]
+```
+
+<ParamField path="n_samples" type="int" required>
+  Number of samples to generate
+</ParamField>
+
+<ParamField path="n_features" type="int" required>
+  Number of input features
+</ParamField>
+
+<ParamField path="n_classes" type="int" required>
+  Number of output classes
+</ParamField>
+
+<ParamField path="seed" type="int" default="42">
+  Random seed
+</ParamField>
+
+Returns `(X, y)` where `X` is features array and `y` is labels array.
+
+### measure_inference_latency_per_sample
+
+Measures average inference time per sample.
+
+```python
+def measure_inference_latency_per_sample(
+    model: NeuralNetwork,
+    X: np.ndarray,
+    precision: str = "float32",
+    runs: int = 5
+) -> float
+```
+
+Returns average latency in seconds per sample (averaged over `runs` iterations).
+
+### measure_batch_throughput
+
+Measures inference throughput in samples per second.
+
+```python
+def measure_batch_throughput(
+    model: NeuralNetwork,
+    X: np.ndarray,
+    precision: str = "float32",
+    runs: int = 5
+) -> float
+```
+
+Returns throughput in samples per second.
+
+### measure_training_time_per_epoch
+
+Measures average training time per epoch.
+
+```python
+def measure_training_time_per_epoch(
+    model: NeuralNetwork,
+    X: np.ndarray,
+    y: np.ndarray,
+    epochs: int = 3,
+    alpha: float = 0.1,
+    batch_size: int = 32,
+    seed: int = 42
+) -> tuple[dict, float]
+```
+
+Returns `(history, time_per_epoch)` where `history` is training metrics and `time_per_epoch` is seconds per epoch.
+
+## Related
+
+- [train](/api/train) - Training pipeline that can be benchmarked
+- [inference](/api/inference) - Inference utilities for performance testing

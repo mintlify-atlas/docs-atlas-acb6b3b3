@@ -1,0 +1,232 @@
+---
+title: Running Experiments
+description: Configure and run training experiments with built-in tracking and versioning
+---
+
+## Overview
+
+The experiment system provides a structured way to run, track, and version training experiments. Each experiment automatically logs hyperparameters, metadata, metrics, and checkpoints.
+
+## Quick Start
+
+Run a predefined experiment:
+
+```bash
+python train.py --experiment baseline
+```
+
+Run with a custom JSON config:
+
+```bash
+python train.py --experiment path/to/config.json
+```
+
+## Predefined Experiment Configs
+
+The framework includes several predefined experiments in `config.py:39-83`:
+
+### baseline
+
+Fast synthetic data experiment for testing:
+
+```python
+{
+    "dataset_version": "synthetic-v1",
+    "layer_sizes": [784, 64, 10],
+    "activations": ["relu", "softmax"],
+    "epochs": 2,
+    "alpha": 0.1,
+    "batch_size": 32,
+    "seed": 42,
+    "precision": "float32",
+    "hardware_constraint_mode": "off",
+    "synthetic_mode": True,
+    "synthetic_samples": 512
+}
+```
+
+### real_fashion_mnist
+
+Full training on Fashion-MNIST dataset:
+
+```python
+{
+    "dataset_path": "Neural Network from Scratch/task/Data/fashion-mnist_train.csv",
+    "dataset_version": "v1",
+    "layer_sizes": [784, 64, 10],
+    "activations": ["relu", "softmax"],
+    "epochs": 3,
+    "alpha": 0.1,
+    "batch_size": 32,
+    "seed": 42,
+    "precision": "float32",
+    "hardware_constraint_mode": "off",
+    "synthetic_mode": False,
+    "dataset_min_rows": 100,
+    "dataset_auto_prepare": True,
+    "dataset_sha256": None
+}
+```
+
+### synthetic_baseline
+
+Synthetic experiment without auto-download:
+
+```python
+{
+    "dataset_version": "synthetic-v1",
+    "layer_sizes": [784, 64, 10],
+    "activations": ["relu", "softmax"],
+    "epochs": 2,
+    "alpha": 0.1,
+    "batch_size": 32,
+    "seed": 42,
+    "precision": "float32",
+    "hardware_constraint_mode": "off",
+    "synthetic_mode": True,
+    "synthetic_samples": 512,
+    "dataset_auto_prepare": False
+}
+```
+
+## Custom Experiment Configs
+
+Create a custom JSON configuration file:
+
+```json
+{
+  "layer_sizes": [784, 128, 64, 10],
+  "activations": ["relu", "relu", "softmax"],
+  "epochs": 5,
+  "alpha": 0.05,
+  "batch_size": 64,
+  "seed": 123,
+  "precision": "float32",
+  "synthetic_mode": false,
+  "dataset_path": "Neural Network from Scratch/task/Data/fashion-mnist_train.csv",
+  "dataset_version": "v1",
+  "dataset_auto_prepare": true
+}
+```
+
+## Configuration Parameters
+
+### Required Parameters
+
+- `layer_sizes` - List of layer dimensions (e.g., `[784, 64, 10]`)
+- `activations` - Activation function for each layer (e.g., `["relu", "softmax"]`)
+
+### Training Parameters
+
+- `epochs` - Number of training epochs (default: `3`)
+- `alpha` - Learning rate (default: `0.1`)
+- `batch_size` - Mini-batch size (default: `32`)
+- `seed` - Random seed for reproducibility (default: `42`)
+- `val_ratio` - Validation split ratio (default: `0.1`)
+
+### Dataset Parameters
+
+- `synthetic_mode` - Use synthetic data instead of real dataset (default: `False`)
+- `synthetic_samples` - Number of synthetic samples to generate (default: `512`)
+- `dataset_path` - Path to dataset CSV file
+- `dataset_version` - Dataset version identifier
+- `dataset_min_rows` - Minimum expected rows for validation (default: `100`)
+- `dataset_auto_prepare` - Auto-download dataset if missing (default: `False`)
+- `dataset_sha256` - Expected SHA256 hash for integrity checking (optional)
+
+### Advanced Parameters
+
+- `precision` - Training precision: `"float32"`, `"float16"`, or `"int8"` (default: `"float32"`)
+- `hardware_constraint_mode` - Hardware simulation mode (default: `"off"`)
+
+## Experiment Tracking
+
+Each experiment run automatically:
+
+1. **Creates a unique experiment ID** from the config name
+2. **Versions each run** incrementally (v1, v2, v3, ...)
+3. **Logs all hyperparameters** (epochs, alpha, batch_size, etc.)
+4. **Records metadata** (precision, model size, dataset version, SHA256 hash)
+5. **Tracks metrics** per epoch (loss, accuracy, val_loss)
+6. **Saves checkpoints** with versioned filenames
+
+### Output Files
+
+After running an experiment:
+
+```
+experiments/
+├── logs/
+│   └── baseline.json              # Experiment history
+└── checkpoints/
+    └── baseline_v1.npz            # Model weights
+```
+
+### Experiment History Format
+
+The history JSON file (`experiments/logs/{experiment_id}.json`) contains:
+
+```json
+[
+  {
+    "experiment_id": "baseline",
+    "version": 1,
+    "created_at": "2026-03-04T10:30:00Z",
+    "config_name": "baseline",
+    "hyperparameters": {
+      "epochs": 2,
+      "alpha": 0.1,
+      "batch_size": 32,
+      "seed": 42,
+      "activations": ["relu", "softmax"],
+      "layer_sizes": [784, 64, 10]
+    },
+    "metadata": {
+      "precision": "float32",
+      "model_size": "784x64x10",
+      "dataset_version": "synthetic-v1",
+      "dataset_sha256": null,
+      "hardware_constraint_mode": "off",
+      "synthetic_mode": true
+    },
+    "metrics": {
+      "loss": [0.125, 0.089],
+      "accuracy": [0.78, 0.85],
+      "val_loss": [0.132, 0.095]
+    },
+    "checkpoints": [
+      "experiments/checkpoints/baseline_v1.npz"
+    ]
+  }
+]
+```
+
+## Implementation Details
+
+The experiment workflow is implemented in `train.py:67-135`:
+
+1. **Resolve config** - Load from `EXPERIMENT_CONFIGS` or JSON file
+2. **Set global seed** - Ensure reproducibility
+3. **Create model** - Initialize with precision config
+4. **Load/generate data** - Use synthetic or real dataset
+5. **Train/val split** - Split data with configurable ratio
+6. **Start experiment** - Create experiment record with metadata
+7. **Train model** - Run `model.fit()` with early stopping support
+8. **Log metrics** - Record training history
+9. **Save checkpoint** - Store model weights with version
+
+## Example Output
+
+```bash
+$ python train.py --experiment baseline
+[dataset] synthetic_mode=True, generated 512 samples
+Experiment logged: baseline v1
+History file: experiments/logs/baseline.json
+Checkpoint: experiments/checkpoints/baseline_v1.npz
+```
+
+## Related
+
+- [Dataset Configuration](/training/dataset-configuration) - Dataset preparation and validation
+- [Checkpointing](/training/checkpointing) - Save and load model weights
+- [Reproducibility](/concepts/reproducibility) - Seed management and deterministic training

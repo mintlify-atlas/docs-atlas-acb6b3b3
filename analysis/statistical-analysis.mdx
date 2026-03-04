@@ -1,0 +1,395 @@
+---
+title: Statistical Analysis
+description: Run repeated benchmarks with statistical aggregation, confidence intervals, and Pareto frontier analysis
+---
+
+The statistical analysis system runs repeated benchmarks to provide statistically robust performance metrics with confidence intervals and visualizations.
+
+## Quick Start
+
+### Command Line Usage
+
+Run repeated benchmarks with statistical analysis:
+
+```bash
+python statistical_analysis.py --repeats 10 --seed 42
+```
+
+### Programmatic Usage
+
+```python
+from statistical_analysis import run_repeated_benchmarks
+
+summary_rows = run_repeated_benchmarks(
+    layer_sizes=[32, 64, 4],
+    activations=["relu", "softmax"],
+    precision_modes=["float32", "float16", "int8"],
+    batch_size=32,
+    n_samples=256,
+    epochs=2,
+    repeats=10,
+    seed=42
+)
+
+for row in summary_rows:
+    print(f"{row['precision_mode']}: {row['train_time_mean']:.4f}s ± {row['train_time_ci95']:.4f}s")
+```
+
+## Statistical Metrics
+
+### Aggregated Metrics
+
+Each precision mode reports mean, standard deviation, and 95% confidence interval:
+
+- **train_time_mean**: Mean training time per epoch
+- **train_time_std**: Standard deviation
+- **train_time_ci95**: 95% confidence interval (±)
+
+- **latency_mean**: Mean inference latency per sample
+- **latency_std**: Standard deviation
+- **latency_ci95**: 95% confidence interval
+
+- **memory_mean**: Mean peak memory usage
+- **memory_std**: Standard deviation
+- **memory_ci95**: 95% confidence interval
+
+- **accuracy_mean**: Mean final training accuracy
+- **accuracy_std**: Standard deviation
+- **accuracy_ci95**: 95% confidence interval
+
+- **energy_mean**: Mean energy per epoch
+- **energy_std**: Standard deviation
+- **energy_ci95**: 95% confidence interval
+
+## Confidence Intervals
+
+The system computes 95% confidence intervals using the t-distribution:
+
+```python
+def _ci95(values):
+    if len(values) < 2:
+        return 0.0
+    return 1.96 * (stdev(values) / sqrt(len(values)))
+```
+
+Interpretation:
+- **Narrow CI**: Low variance, consistent results
+- **Wide CI**: High variance, inconsistent performance
+
+### Example Output
+
+```python
+{
+  "precision_mode": "float32",
+  "repeats": 10,
+  "train_time_mean": 0.123456,
+  "train_time_std": 0.005432,
+  "train_time_ci95": 0.003371,
+  "latency_mean": 0.00048213,
+  "latency_std": 0.00001234,
+  "latency_ci95": 0.00000765,
+  "memory_mean": 45.678901,
+  "memory_std": 1.234567,
+  "memory_ci95": 0.765432,
+  "accuracy_mean": 0.892345,
+  "accuracy_std": 0.012345,
+  "accuracy_ci95": 0.007654,
+  "energy_mean": 12.345678,
+  "energy_std": 0.543210,
+  "energy_ci95": 0.336789
+}
+```
+
+## Output Files
+
+Results are saved to `benchmarks/statistical/`:
+
+### raw_runs.csv
+
+Individual benchmark runs:
+
+```csv
+seed,layer_sizes,precision_mode,batch_size,epochs,n_samples,train_time_per_epoch_s,inference_latency_per_sample_s,batch_throughput_samples_per_s,peak_memory_mb,cpu_utilization_percent,final_train_accuracy,energy_per_epoch_j,repeat_id
+42,32x64x4,float32,32,2,256,0.123456,0.00048213,2074.3,45.678,87.6,0.892,12.345,0
+43,32x64x4,float32,32,2,256,0.125678,0.00049123,2036.7,46.123,88.2,0.887,12.567,1
+...
+```
+
+### summary_stats.csv
+
+Aggregated statistics:
+
+```csv
+precision_mode,repeats,train_time_mean,train_time_std,train_time_ci95,latency_mean,latency_std,latency_ci95,memory_mean,memory_std,memory_ci95,accuracy_mean,accuracy_std,accuracy_ci95,energy_mean,energy_std,energy_ci95
+float32,10,0.123456,0.005432,0.003371,0.00048213,0.00001234,0.00000765,45.678901,1.234567,0.765432,0.892345,0.012345,0.007654,12.345678,0.543210,0.336789
+float16,10,0.098765,0.004321,0.002678,0.00039876,0.00000987,0.00000612,23.456789,0.987654,0.612345,0.889012,0.015678,0.009721,9.876543,0.432109,0.267890
+int8,10,0.087654,0.003210,0.001989,0.00034567,0.00000765,0.00000474,12.345678,0.654321,0.405432,0.881234,0.018765,0.011634,8.765432,0.321098,0.199012
+```
+
+### summary_stats.json
+
+JSON format for programmatic access:
+
+```json
+[
+  {
+    "precision_mode": "float32",
+    "repeats": 10,
+    "train_time_mean": 0.123456,
+    "train_time_std": 0.005432,
+    "train_time_ci95": 0.003371,
+    ...
+  }
+]
+```
+
+## Visualization
+
+### Accuracy vs Latency
+
+Plot trade-offs between accuracy and inference latency:
+
+![Accuracy vs Latency](accuracy_vs_latency.png)
+
+```python
+# Generated automatically in accuracy_vs_latency.png
+plt.scatter(latency, accuracy)
+for precision, x, y in zip(precisions, latency, accuracy):
+    plt.annotate(precision, (x, y))
+plt.xlabel("Latency (s/sample)")
+plt.ylabel("Accuracy")
+```
+
+### Accuracy vs Energy
+
+Plot trade-offs between accuracy and energy consumption:
+
+![Accuracy vs Energy](accuracy_vs_energy.png)
+
+```python
+# Generated automatically in accuracy_vs_energy.png
+plt.scatter(energy, accuracy)
+for precision, x, y in zip(precisions, energy, accuracy):
+    plt.annotate(precision, (x, y))
+plt.xlabel("Estimated Energy per Epoch (J)")
+plt.ylabel("Accuracy")
+```
+
+### Accuracy vs Memory
+
+Plot trade-offs between accuracy and memory usage:
+
+![Accuracy vs Memory](accuracy_vs_memory.png)
+
+```python
+# Generated automatically in accuracy_vs_memory.png
+plt.scatter(memory, accuracy)
+for precision, x, y in zip(precisions, memory, accuracy):
+    plt.annotate(precision, (x, y))
+plt.xlabel("Peak Memory (MB)")
+plt.ylabel("Accuracy")
+```
+
+## Pareto Frontier Analysis
+
+Identify optimal configurations on the Pareto frontier:
+
+![Pareto Frontier](pareto_frontier.png)
+
+### Pareto Optimality
+
+A configuration is Pareto-optimal if no other configuration is better in all objectives:
+
+```python
+# Point A dominates point B if:
+# - A has lower latency AND higher accuracy, OR
+# - A has lower latency OR higher accuracy (and equal in the other)
+
+for lat_i, acc_i, mode_i in points:
+    dominated = False
+    for lat_j, acc_j, _ in points:
+        if lat_j <= lat_i and acc_j >= acc_i and (lat_j < lat_i or acc_j > acc_i):
+            dominated = True
+            break
+    if not dominated:
+        pareto.append((lat_i, acc_i, mode_i))
+```
+
+### Interpreting the Pareto Frontier
+
+- **On the frontier**: Optimal trade-off (cannot improve one metric without degrading another)
+- **Below the frontier**: Suboptimal (other configurations are strictly better)
+- **Above the frontier**: Theoretically ideal (but unachievable with current configurations)
+
+## Advanced Usage
+
+### Custom Output Directory
+
+```python
+from pathlib import Path
+
+output_dir = Path("custom_results")
+summary_rows = run_repeated_benchmarks(
+    layer_sizes=[64, 128, 10],
+    activations=["relu", "softmax"],
+    precision_modes=["float32", "float16"],
+    batch_size=64,
+    n_samples=512,
+    epochs=5,
+    repeats=15,
+    seed=123,
+    output_dir=output_dir
+)
+```
+
+### Analyzing Results
+
+```python
+import pandas as pd
+import json
+
+# Load summary statistics
+with open("benchmarks/statistical/summary_stats.json") as f:
+    data = json.load(f)
+
+df = pd.DataFrame(data)
+
+# Find best precision for accuracy
+best_accuracy = df.loc[df["accuracy_mean"].idxmax()]
+print(f"Best accuracy: {best_accuracy['precision_mode']} ({best_accuracy['accuracy_mean']:.4f})")
+
+# Find fastest precision
+fastest = df.loc[df["latency_mean"].idxmin()]
+print(f"Fastest: {fastest['precision_mode']} ({fastest['latency_mean']:.6f}s/sample)")
+
+# Find most memory-efficient
+most_efficient = df.loc[df["memory_mean"].idxmin()]
+print(f"Most efficient: {most_efficient['precision_mode']} ({most_efficient['memory_mean']:.2f}MB)")
+```
+
+### Comparing Multiple Runs
+
+```python
+import pandas as pd
+
+# Load raw runs
+df = pd.read_csv("benchmarks/statistical/raw_runs.csv")
+
+# Group by precision and repeat
+grouped = df.groupby(["precision_mode", "repeat_id"])
+
+# Analyze variance across runs
+for precision in df["precision_mode"].unique():
+    subset = df[df["precision_mode"] == precision]
+    print(f"\n{precision}:")
+    print(f"  Mean accuracy: {subset['final_train_accuracy'].mean():.4f}")
+    print(f"  Std dev: {subset['final_train_accuracy'].std():.4f}")
+    print(f"  Min: {subset['final_train_accuracy'].min():.4f}")
+    print(f"  Max: {subset['final_train_accuracy'].max():.4f}")
+```
+
+## Reproducibility
+
+Each repeat uses a different seed:
+
+```python
+for r in range(repeats):
+    run_seed = seed + r  # seed=42 → runs use seeds 42, 43, 44, ...
+    result = benchmark_one_setup(
+        ...,
+        seed=run_seed
+    )
+```
+
+This ensures different random initializations while maintaining reproducibility.
+
+## Choosing Number of Repeats
+
+| Repeats | Use Case | CI Accuracy |
+|---------|----------|-------------|
+| 3-5     | Quick validation | Low |
+| 5-10    | Development testing | Medium |
+| 10-20   | Production analysis | High |
+| 20+     | Research/publication | Very high |
+
+More repeats provide tighter confidence intervals but increase runtime.
+
+## Best Practices
+
+### 1. Use Sufficient Repeats
+
+```python
+# Too few (unreliable)
+summary = run_repeated_benchmarks(..., repeats=3)
+
+# Good balance
+summary = run_repeated_benchmarks(..., repeats=10)
+
+# High confidence
+summary = run_repeated_benchmarks(..., repeats=20)
+```
+
+### 2. Check Confidence Intervals
+
+```python
+for row in summary_rows:
+    ci_width = row["train_time_ci95"]
+    mean = row["train_time_mean"]
+    relative_ci = (ci_width / mean) * 100
+    
+    if relative_ci > 5:
+        print(f"⚠️  {row['precision_mode']}: Large CI ({relative_ci:.1f}%)")
+```
+
+### 3. Validate Pareto Frontier
+
+```python
+# Configurations on Pareto frontier are optimal
+# If important configs are missing, investigate why
+```
+
+### 4. Report Statistics Properly
+
+```python
+print(f"Training time: {mean:.4f}s ± {ci95:.4f}s (mean ± 95% CI, n={repeats})")
+```
+
+## Integration with Other Tools
+
+### With Benchmarking
+
+```python
+from benchmark import benchmark_one_setup
+
+# Statistical analysis uses benchmark_one_setup internally
+result = benchmark_one_setup(
+    layer_sizes=[32, 64, 4],
+    activations=["relu", "softmax"],
+    precision_mode="float32",
+    batch_size=32,
+    n_samples=256,
+    epochs=2,
+    seed=42
+)
+```
+
+### With Reproducibility
+
+```python
+from reproducibility import set_global_seed
+
+# Set base seed for reproducible statistical analysis
+set_global_seed(42)
+summary = run_repeated_benchmarks(..., seed=42)
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Benchmarking" icon="stopwatch" href="/analysis/benchmarking">
+    Run single benchmark configurations
+  </Card>
+  <Card title="Hardware Simulation" icon="microchip" href="/analysis/hardware-simulation">
+    Test under hardware constraints
+  </Card>
+</CardGroup>

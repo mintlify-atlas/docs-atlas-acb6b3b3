@@ -1,0 +1,342 @@
+---
+title: Checkpointing
+description: Save and load model weights for training resumption and deployment
+---
+
+## Overview
+
+The checkpointing system saves and loads model weights in NumPy's `.npz` format, enabling training resumption, model sharing, and deployment.
+
+## Quick Start
+
+### Save Weights
+
+```python
+from student import NeuralNetwork
+
+model = NeuralNetwork(
+    layer_sizes=[784, 64, 10],
+    activations=["relu", "softmax"]
+)
+
+# Train model...
+model.fit(X_train, y_train, epochs=5)
+
+# Save checkpoint
+model.save_weights("checkpoints/model.npz")
+```
+
+### Load Weights
+
+```python
+# Create model with same architecture
+model = NeuralNetwork(
+    layer_sizes=[784, 64, 10],
+    activations=["relu", "softmax"]
+)
+
+# Load checkpoint
+model.load_weights("checkpoints/model.npz")
+
+# Ready for inference
+predictions = model.predict(X_test)
+```
+
+## Implementation
+
+### Saving Weights
+
+Implemented in `model.py:157-162`:
+
+```python
+def save_weights(self, path="two_layer_weights.npz"):
+    data = {}
+    for i, layer in enumerate(self.layers, start=1):
+        data[f"weights{i}"] = layer.weights
+        data[f"bias{i}"] = layer.bias
+    np.savez(path, **data)
+```
+
+Saves:
+- All layer weights as `weights1`, `weights2`, etc.
+- All layer biases as `bias1`, `bias2`, etc.
+- Uses NumPy's compressed `.npz` format
+
+### Loading Weights
+
+Implemented in `model.py:164-168`:
+
+```python
+def load_weights(self, path="two_layer_weights.npz"):
+    data = np.load(path)
+    for i, layer in enumerate(self.layers, start=1):
+        layer.weights = data[f"weights{i}"].astype(self.train_dtype)
+        layer.bias = data[f"bias{i}"].astype(self.train_dtype)
+```
+
+Loads:
+- Reads all weights and biases from file
+- Converts to model's training dtype
+- Restores exact parameter state
+
+## Automatic Checkpointing
+
+### During Experiments
+
+Experiments automatically save checkpoints (`train.py:126-130`):
+
+```python
+checkpoint_dir = Path("experiments") / "checkpoints"
+checkpoint_dir.mkdir(parents=True, exist_ok=True)
+checkpoint_path = checkpoint_dir / f"{record.experiment_id}_v{record.version}.npz"
+model.save_weights(str(checkpoint_path))
+manager.add_checkpoint(str(checkpoint_path))
+```
+
+Checkpoint naming:
+- Format: `{experiment_id}_v{version}.npz`
+- Example: `baseline_v1.npz`, `baseline_v2.npz`
+- Tracked in experiment history JSON
+
+### During Training
+
+Optional checkpoint during `fit()` (`model.py:229-230`):
+
+```python
+history = model.fit(
+    X_train, y_train,
+    epochs=10,
+    save_path="checkpoints/training_checkpoint.npz"  # Optional
+)
+```
+
+## Checkpoint File Format
+
+### NPZ Structure
+
+A checkpoint file contains:
+
+```python
+import numpy as np
+
+data = np.load("checkpoints/baseline_v1.npz")
+print(data.files)
+# ['weights1', 'bias1', 'weights2', 'bias2', ...]
+
+print(data['weights1'].shape)  # (784, 64)
+print(data['bias1'].shape)     # (64,)
+print(data['weights2'].shape)  # (64, 10)
+print(data['bias2'].shape)     # (10,)
+```
+
+### Multi-Layer Models
+
+For deeper architectures:
+
+```python
+model = NeuralNetwork(
+    layer_sizes=[784, 128, 64, 10],
+    activations=["relu", "relu", "softmax"]
+)
+
+# Checkpoint contains:
+# - weights1: (784, 128)
+# - bias1: (128,)
+# - weights2: (128, 64)
+# - bias2: (64,)
+# - weights3: (64, 10)
+# - bias3: (10,)
+```
+
+## Best Practices
+
+### Architecture Consistency
+
+Ensure model architecture matches checkpoint:
+
+```python
+# Save with architecture metadata
+metadata = {
+    "layer_sizes": [784, 64, 10],
+    "activations": ["relu", "softmax"],
+    "precision": "float32"
+}
+
+# Load and verify
+model = NeuralNetwork(
+    layer_sizes=metadata["layer_sizes"],
+    activations=metadata["activations"]
+)
+model.load_weights("checkpoints/model.npz")
+```
+
+### Versioning
+
+Use version numbers for experiment tracking:
+
+```bash
+experiments/checkpoints/
+├── baseline_v1.npz       # First run
+├── baseline_v2.npz       # Second run
+├── baseline_v3.npz       # Third run
+└── real_fashion_mnist_v1.npz
+```
+
+### Precision Handling
+
+Checkpoints preserve original precision:
+
+```python
+# Model trained in float32
+model = NeuralNetwork(
+    layer_sizes=[784, 64, 10],
+    activations=["relu", "softmax"],
+    precision_config=PrecisionConfig(train_dtype="float32")
+)
+model.fit(X_train, y_train)
+model.save_weights("fp32_model.npz")
+
+# Load into float16 model (converts automatically)
+fp16_model = NeuralNetwork(
+    layer_sizes=[784, 64, 10],
+    activations=["relu", "softmax"],
+    precision_config=PrecisionConfig(train_dtype="float16")
+)
+fp16_model.load_weights("fp32_model.npz")  # Converts to float16
+```
+
+## Early Stopping with Checkpoints
+
+The `fit()` method supports restoring best weights (`model.py:186-227`):
+
+```python
+history = model.fit(
+    X_train, y_train,
+    X_val=X_val,
+    y_val=y_val,
+    epochs=100,
+    patience=10,           # Stop after 10 epochs without improvement
+    min_delta=0.001,       # Minimum improvement threshold
+    restore_best=True      # Restore best weights when stopping
+)
+```
+
+Internal checkpointing:
+- Tracks best validation loss
+- Stores best weights in memory
+- Restores on early stop or end of training
+
+## Checkpoint Management
+
+### ExperimentManager Integration
+
+Checkpoints are tracked in experiment history (`experiment_manager.py:88-92`):
+
+```python
+manager = ExperimentManager(log_dir="experiments/logs")
+record = manager.start_experiment(
+    config_name="baseline",
+    hyperparameters={...},
+    metadata={...}
+)
+
+# Add checkpoint to experiment record
+manager.add_checkpoint("experiments/checkpoints/baseline_v1.npz")
+```
+
+### Checkpoint History
+
+Experiment JSON includes checkpoint paths:
+
+```json
+{
+  "experiment_id": "baseline",
+  "version": 1,
+  "checkpoints": [
+    "experiments/checkpoints/baseline_v1.npz"
+  ],
+  "metrics": {...},
+  "hyperparameters": {...}
+}
+```
+
+## Loading for Inference
+
+### Direct Loading
+
+```python
+from student import NeuralNetwork
+import numpy as np
+
+# Load model
+model = NeuralNetwork(
+    layer_sizes=[784, 64, 10],
+    activations=["relu", "softmax"]
+)
+model.load_weights("experiments/checkpoints/baseline_v1.npz")
+
+# Run inference
+X_test = np.random.randn(100, 784).astype(np.float32)
+predictions = model.predict(X_test)
+```
+
+### From Experiment History
+
+```python
+import json
+from pathlib import Path
+
+# Read experiment history
+history = json.loads(Path("experiments/logs/baseline.json").read_text())
+
+# Get latest checkpoint
+latest = history[-1]  # Most recent version
+checkpoint_path = latest["checkpoints"][0]
+
+# Load model
+model = NeuralNetwork(
+    layer_sizes=latest["hyperparameters"]["layer_sizes"],
+    activations=latest["hyperparameters"]["activations"]
+)
+model.load_weights(checkpoint_path)
+```
+
+## Error Handling
+
+### Missing Files
+
+```python
+try:
+    model.load_weights("missing.npz")
+except FileNotFoundError:
+    print("Checkpoint not found")
+```
+
+### Architecture Mismatch
+
+```python
+# Model: [784, 64, 10]
+# Checkpoint: [784, 128, 10]
+try:
+    model.load_weights("wrong_architecture.npz")
+except KeyError:
+    print("Checkpoint architecture doesn't match model")
+```
+
+### Precision Compatibility
+
+Checkpoints work across precisions:
+
+```python
+# Save in float32
+fp32_model.save_weights("model.npz")
+
+# Load in float16 (automatic conversion)
+fp16_model.load_weights("model.npz")  # Works!
+```
+
+## Related
+
+- [Running Experiments](/training/experiments) - Automatic checkpoint creation
+- [Model Architecture](/api/model) - Understanding layer structure
+- [Deployment Inference](/deployment/inference) - Using checkpoints for production

@@ -1,0 +1,123 @@
+---
+title: "run_workflow.py"
+description: "Standardized CLI for reproducible experiment workflows"
+---
+
+## Overview
+
+The `run_workflow.py` script provides a unified interface for executing experiment workflows with three distinct modes: training only, benchmarking only, or a full end-to-end pipeline.
+
+**Location**: `scripts/run_workflow.py`
+
+## Usage
+
+```bash
+python scripts/run_workflow.py [OPTIONS]
+```
+
+## Arguments
+
+### `--mode`
+
+**Type**: `str`  
+**Choices**: `train`, `benchmark`, `full`  
+**Default**: `full`
+
+Selects the workflow execution mode:
+
+- **`train`**: Runs only the training step using the specified experiment configuration
+- **`benchmark`**: Runs benchmarking and statistical analysis (skips training)
+- **`full`**: Executes the complete pipeline: train → benchmark → statistical analysis
+
+### `--experiment`
+
+**Type**: `str`  
+**Default**: `baseline`
+
+Specifies the experiment configuration name or path to a JSON config file. Used only in training mode.
+
+### `--stats-repeats`
+
+**Type**: `int`  
+**Default**: `5`
+
+Number of repetitions for statistical analysis in benchmark mode.
+
+### `--seed`
+
+**Type**: `int`  
+**Default**: `42`
+
+Global random seed forwarded to both benchmark and statistical analysis steps for reproducibility.
+
+## Workflow Stages
+
+### Train Stage
+
+Executes the model training pipeline:
+
+```bash
+python "Neural Network from Scratch/task/train.py" --experiment <experiment>
+```
+
+### Benchmark Stage
+
+Runs performance benchmarking:
+
+```bash
+python "Neural Network from Scratch/task/benchmark.py" --seed <seed>
+```
+
+### Statistical Analysis Stage
+
+Performs statistical analysis over multiple runs:
+
+```bash
+python "Neural Network from Scratch/task/statistical_analysis.py" --repeats <repeats> --seed <seed>
+```
+
+## Examples
+
+### Run Full Pipeline
+
+```bash
+python scripts/run_workflow.py --mode full --experiment baseline --seed 42
+```
+
+Executes training with the baseline configuration, then runs benchmarking and statistical analysis with seed 42.
+
+### Train Only
+
+```bash
+python scripts/run_workflow.py --mode train --experiment custom_config.json
+```
+
+Runs only the training step with a custom JSON configuration file.
+
+### Benchmark Only
+
+```bash
+python scripts/run_workflow.py --mode benchmark --stats-repeats 10 --seed 123
+```
+
+Skips training and runs benchmarking with 10 statistical repeats using seed 123.
+
+### Quick Test Run
+
+```bash
+python scripts/run_workflow.py --mode full --stats-repeats 3
+```
+
+Runs the full pipeline with fewer statistical repeats for faster testing.
+
+## Implementation Details
+
+- **Working Directory**: All commands execute from the repository root
+- **Error Handling**: Uses `subprocess.run(check=True)` to halt on any step failure
+- **Python Executable**: Automatically uses the same Python interpreter running the script
+- **Sequential Execution**: Steps run in strict order with no parallelization
+
+## Related
+
+- [verify_environment.py](/api/cli-verify-environment) - Environment verification script
+- [Training Pipeline](/api/train) - Training module documentation

@@ -1,0 +1,309 @@
+---
+title: Hardware-Aware Neural Networks from Scratch
+description: NumPy-based neural network implementation for hardware-constrained experiments and system-level trade-off analysis
+mode: custom
+---
+
+<div className="relative overflow-hidden bg-gradient-to-br from-[#4F46E5] via-[#3730A3] to-[#1e1b4b] dark:from-[#4F46E5] dark:via-[#3730A3] dark:to-[#0f0d2e] py-20">
+  <div className="max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="lg:grid lg:grid-cols-12 lg:gap-8 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6">
+          Hardware-Aware Neural Networks from Scratch
+        </h1>
+        <p className="text-lg sm:text-xl text-indigo-100 mb-8 max-w-2xl">
+          A pure NumPy implementation for training and evaluating neural networks under real-world hardware constraints. Build transparent, reproducible models with precision, memory, and latency awareness.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a
+            href="/quickstart"
+            className="inline-flex items-center px-6 py-3 rounded-lg bg-white text-[#4F46E5] font-semibold hover:bg-indigo-50 transition-colors"
+          >
+            Get Started
+          </a>
+          <a
+            href="/api/model"
+            className="inline-flex items-center px-6 py-3 rounded-lg border-2 border-white/30 bg-white/10 text-white font-semibold hover:bg-white/20 transition-colors"
+          >
+            API Reference
+          </a>
+        </div>
+      </div>
+      <div className="hidden lg:block lg:col-span-5 mt-12 lg:mt-0">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#818CF8] to-[#4F46E5] rounded-2xl blur-2xl opacity-30"></div>
+          <div className="relative bg-[#1a1d27]/80 backdrop-blur-sm border border-white/10 rounded-2xl p-6">
+            <div className="text-sm text-gray-400 mb-2">model.py</div>
+            <pre className="text-indigo-200 text-sm overflow-x-auto">
+{`model = NeuralNetwork(
+  layer_sizes=[784, 128, 64, 10],
+  activations=['relu', 'relu', 'softmax'],
+  precision_config=PrecisionConfig(
+    train_dtype='float32',
+    infer_precision='int8',
+    max_memory_mb=512.0
+  )
+)
+
+history = model.fit(
+  X_train, y_train,
+  epochs=10,
+  batch_size=32,
+  X_val=X_val,
+  y_val=y_val
+)`}
+            </pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Quick Start
+    </h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Get up and running in minutes with our streamlined workflow
+    </p>
+  </div>
+
+  <Steps>
+    <Step title="Install dependencies">
+      Clone the repository and install the required packages:
+
+      ```bash
+      git clone https://github.com/RaviTejaMedarametla/neural-network-from-scratch.git
+      cd neural-network-from-scratch
+      pip install -r requirements.txt
+      pip install -r requirements-dev.txt
+      ```
+
+      Verify your environment:
+
+      ```bash
+      python scripts/verify_environment.py
+      ```
+    </Step>
+
+    <Step title="Run your first experiment">
+      Train a model with the baseline configuration using synthetic data:
+
+      ```bash
+      python scripts/run_workflow.py --mode full --experiment baseline --stats-repeats 5
+      ```
+
+      This will:
+      - Train a 784→64→10 network on synthetic data
+      - Run benchmarks measuring latency, memory, and throughput
+      - Generate statistical analysis across 5 runs
+    </Step>
+
+    <Step title="Inspect the results">
+      After training completes, check the output:
+
+      ```bash
+      experiments/
+      ├── checkpoints/      # Saved model weights (.npz files)
+      ├── logs/             # Training history and metrics (JSON)
+      └── reports/          # Benchmark and profiling reports
+      ```
+
+      View your experiment log:
+
+      ```bash
+      cat experiments/logs/<experiment_id>.json
+      ```
+
+      <Accordion title="Example output">
+        ```json
+        {
+          "experiment_id": "baseline_1234567890",
+          "version": 1,
+          "config": {
+            "layer_sizes": [784, 64, 10],
+            "precision": "float32",
+            "epochs": 2
+          },
+          "metrics": {
+            "train_loss": [0.523, 0.312],
+            "val_loss": [0.547, 0.329],
+            "val_accuracy": [0.832, 0.891]
+          }
+        }
+        ```
+      </Accordion>
+    </Step>
+
+    <Step title="Try hardware-constrained training">
+      Run an experiment with memory and precision constraints:
+
+      ```bash
+      python "Neural Network from Scratch/task/train.py" --experiment real_fashion_mnist
+      ```
+
+      For advanced configurations, see the [Experiments guide](/training/experiments).
+    </Step>
+  </Steps>
+</div>
+
+<div className="mt-16 mb-16 max-w-6xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Key Features
+    </h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Everything you need to study neural networks under realistic constraints
+    </p>
+  </div>
+
+  <CardGroup cols={3}>
+    <Card title="Pure NumPy Implementation" icon="cube" href="/concepts/architecture">
+      Transparent tensor operations with no hidden optimizations. Perfect for education and debugging.
+    </Card>
+    <Card title="Hardware Simulation" icon="microchip" href="/concepts/hardware-constraints">
+      Model memory limits, compute speed, and precision degradation before deploying to real hardware.
+    </Card>
+    <Card title="Multi-Precision Support" icon="sliders" href="/concepts/precision-modes">
+      Train in float32, infer in float16 or int8. Measure the accuracy-performance trade-off.
+    </Card>
+    <Card title="Comprehensive Benchmarking" icon="gauge-high" href="/analysis/benchmarking">
+      Measure latency, throughput, memory usage, and energy consumption with statistical rigor.
+    </Card>
+    <Card title="Experiment Tracking" icon="flask" href="/training/experiments">
+      Every run is logged with full reproducibility metadata: seeds, dataset hashes, and hyperparameters.
+    </Card>
+    <Card title="Statistical Analysis" icon="chart-line" href="/analysis/statistical-analysis">
+      Aggregate metrics across multiple runs with confidence intervals and significance tests.
+    </Card>
+    <Card title="Profiling Tools" icon="magnifying-glass-chart" href="/analysis/profiling">
+      Layer-by-layer breakdown of compute time, memory allocations, and parameter counts.
+    </Card>
+    <Card title="ONNX Export" icon="file-export" href="/deployment/onnx-export">
+      Export trained models to ONNX format for deployment in production runtime environments.
+    </Card>
+    <Card title="PyTorch Comparison" icon="code-compare" href="/deployment/pytorch-comparison">
+      Validate your implementation against PyTorch's reference behavior with automated tests.
+    </Card>
+  </CardGroup>
+</div>
+
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">
+      Explore by Topic
+    </h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Deep dive into core concepts and workflows
+    </p>
+  </div>
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <a
+      href="/concepts/architecture"
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#4F46E5] dark:hover:border-[#4F46E5] overflow-hidden no-underline transition-colors"
+    >
+      <div className="h-32 bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
+        <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+        </svg>
+      </div>
+      <div className="p-6 bg-white dark:bg-[#1a1d27]">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2 group-hover:text-[#4F46E5] transition-colors">
+          Architecture Overview
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Understand the modular design: layers, activations, loss functions, and the training loop.
+        </p>
+        <span className="text-sm font-medium text-gray-500 dark:text-gray-400 group-hover:text-[#4F46E5] transition-colors">
+          Learn more →
+        </span>
+      </div>
+    </a>
+
+    <a
+      href="/training/experiments"
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#4F46E5] dark:hover:border-[#4F46E5] overflow-hidden no-underline transition-colors"
+    >
+      <div className="h-32 bg-gradient-to-br from-blue-500 to-cyan-600 flex items-center justify-center">
+        <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+        </svg>
+      </div>
+      <div className="p-6 bg-white dark:bg-[#1a1d27]">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2 group-hover:text-[#4F46E5] transition-colors">
+          Running Experiments
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Configure experiments with custom layer sizes, precision modes, and hardware constraints.
+        </p>
+        <span className="text-sm font-medium text-gray-500 dark:text-gray-400 group-hover:text-[#4F46E5] transition-colors">
+          Learn more →
+        </span>
+      </div>
+    </a>
+
+    <a
+      href="/analysis/benchmarking"
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#4F46E5] dark:hover:border-[#4F46E5] overflow-hidden no-underline transition-colors"
+    >
+      <div className="h-32 bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
+        <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      </div>
+      <div className="p-6 bg-white dark:bg-[#1a1d27]">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2 group-hover:text-[#4F46E5] transition-colors">
+          Benchmarking & Profiling
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Measure latency, memory, throughput, and energy. Profile layer-by-layer resource usage.
+        </p>
+        <span className="text-sm font-medium text-gray-500 dark:text-gray-400 group-hover:text-[#4F46E5] transition-colors">
+          Learn more →
+        </span>
+      </div>
+    </a>
+
+    <a
+      href="/concepts/reproducibility"
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#4F46E5] dark:hover:border-[#4F46E5] overflow-hidden no-underline transition-colors"
+    >
+      <div className="h-32 bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center">
+        <svg className="w-16 h-16 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        </svg>
+      </div>
+      <div className="p-6 bg-white dark:bg-[#1a1d27]">
+        <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2 group-hover:text-[#4F46E5] transition-colors">
+          Reproducibility
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+          Every experiment is tracked with seeds, dataset checksums, and versioned configurations.
+        </p>
+        <span className="text-sm font-medium text-gray-500 dark:text-gray-400 group-hover:text-[#4F46E5] transition-colors">
+          Learn more →
+        </span>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div className="mt-20 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl bg-gradient-to-r from-[#4F46E5] to-[#3730A3] dark:from-[#4F46E5] dark:to-[#1e1b4b] p-12 text-center">
+    <h2 className="text-3xl font-bold text-white mb-4">
+      Ready to get started?
+    </h2>
+    <p className="text-lg text-indigo-100 mb-8 max-w-2xl mx-auto">
+      Train your first hardware-aware neural network in under 5 minutes. No GPU required.
+    </p>
+    <a
+      href="/quickstart"
+      className="inline-flex items-center px-8 py-3 rounded-lg bg-white text-[#4F46E5] font-semibold hover:bg-indigo-50 transition-colors"
+    >
+      Start Building
+    </a>
+  </div>
+</div>

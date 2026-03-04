@@ -1,0 +1,281 @@
+---
+title: 'Neural Network Models'
+description: 'Core neural network model classes for building and training networks'
+---
+
+## NeuralNetworkModel
+
+The base neural network model class that supports flexible architecture configuration, multiple precision modes, and regularization techniques.
+
+### Constructor
+
+```python
+NeuralNetworkModel(layer_sizes, activations, l2_lambda=0.0, dropout_rate=0.0, precision_config=None)
+```
+
+<ParamField path="layer_sizes" type="list[int]" required>
+  List of layer sizes including input and output dimensions. Must have at least 2 elements.
+  Example: `[784, 128, 64, 10]` for input size 784, two hidden layers (128 and 64 units), and output size 10.
+</ParamField>
+
+<ParamField path="activations" type="list[str]" required>
+  List of activation function names for each layer. Length must equal `len(layer_sizes) - 1`.
+  Supported values: `"sigmoid"`, `"relu"`, `"softmax"`.
+</ParamField>
+
+<ParamField path="l2_lambda" type="float" default="0.0">
+  L2 regularization strength. Higher values increase regularization penalty.
+</ParamField>
+
+<ParamField path="dropout_rate" type="float" default="0.0">
+  Dropout probability during training. Must be between 0 and 1.
+</ParamField>
+
+<ParamField path="precision_config" type="object" default="None">
+  Configuration object for training and inference precision. Uses `DEFAULT_CONFIG` if not provided.
+</ParamField>
+
+### Methods
+
+#### forward
+
+Performs forward propagation through the network.
+
+```python
+forward(x, training=False, precision=None)
+```
+
+<ParamField path="x" type="ndarray" required>
+  Input data of shape `(batch_size, n_features)`.
+</ParamField>
+
+<ParamField path="training" type="bool" default="False">
+  Whether to apply dropout during forward pass.
+</ParamField>
+
+<ParamField path="precision" type="str" default="None">
+  Precision mode for inference: `"float32"`, `"float16"`, or `"int8"`. Uses `infer_precision` from config if not specified.
+</ParamField>
+
+**Returns:** `ndarray` - Output predictions of shape `(batch_size, n_classes)`.
+
+#### fit
+
+Trains the model using mini-batch gradient descent.
+
+```python
+fit(X, y, epochs=10, alpha=0.1, batch_size=32, save_path=None, shuffle=True, seed=42,
+    X_val=None, y_val=None, patience=None, min_delta=0.0, restore_best=True)
+```
+
+<ParamField path="X" type="ndarray" required>
+  Training data of shape `(n_samples, n_features)`.
+</ParamField>
+
+<ParamField path="y" type="ndarray" required>
+  Training labels. Can be class indices or one-hot encoded.
+</ParamField>
+
+<ParamField path="epochs" type="int" default="10">
+  Number of training epochs.
+</ParamField>
+
+<ParamField path="alpha" type="float" default="0.1">
+  Learning rate for gradient descent.
+</ParamField>
+
+<ParamField path="batch_size" type="int" default="32">
+  Mini-batch size for training.
+</ParamField>
+
+<ParamField path="save_path" type="str" default="None">
+  Path to save model weights after training.
+</ParamField>
+
+<ParamField path="shuffle" type="bool" default="True">
+  Whether to shuffle training data each epoch.
+</ParamField>
+
+<ParamField path="seed" type="int" default="42">
+  Random seed for reproducibility.
+</ParamField>
+
+<ParamField path="X_val" type="ndarray" default="None">
+  Validation data for early stopping.
+</ParamField>
+
+<ParamField path="y_val" type="ndarray" default="None">
+  Validation labels for early stopping.
+</ParamField>
+
+<ParamField path="patience" type="int" default="None">
+  Number of epochs with no improvement before early stopping.
+</ParamField>
+
+<ParamField path="min_delta" type="float" default="0.0">
+  Minimum change in validation loss to qualify as improvement.
+</ParamField>
+
+<ParamField path="restore_best" type="bool" default="True">
+  Whether to restore best weights after early stopping.
+</ParamField>
+
+**Returns:** `dict` - Training history with keys `"loss"`, `"accuracy"`, and `"val_loss"`.
+
+#### predict
+
+Generates class predictions for input data.
+
+```python
+predict(x, precision=None)
+```
+
+<ParamField path="x" type="ndarray" required>
+  Input data of shape `(batch_size, n_features)`.
+</ParamField>
+
+<ParamField path="precision" type="str" default="None">
+  Precision mode: `"float32"`, `"float16"`, or `"int8"`.
+</ParamField>
+
+**Returns:** `ndarray` - Predicted class indices of shape `(batch_size,)`.
+
+#### save_weights
+
+Saves model weights to a file.
+
+```python
+save_weights(path="two_layer_weights.npz")
+```
+
+<ParamField path="path" type="str" default="two_layer_weights.npz">
+  Path to save weights file.
+</ParamField>
+
+#### load_weights
+
+Loads model weights from a file.
+
+```python
+load_weights(path="two_layer_weights.npz")
+```
+
+<ParamField path="path" type="str" default="two_layer_weights.npz">
+  Path to weights file.
+</ParamField>
+
+#### backprop
+
+Performs backpropagation and updates weights.
+
+```python
+backprop(x, y, alpha)
+```
+
+<ParamField path="x" type="ndarray" required>
+  Input batch of shape `(batch_size, n_features)`.
+</ParamField>
+
+<ParamField path="y" type="ndarray" required>
+  Target labels (one-hot encoded).
+</ParamField>
+
+<ParamField path="alpha" type="float" required>
+  Learning rate.
+</ParamField>
+
+#### gradient_check
+
+Verifies gradient computation using numerical approximation.
+
+```python
+gradient_check(X, y, epsilon=1e-5, num_checks=10)
+```
+
+<ParamField path="X" type="ndarray" required>
+  Input data for gradient checking.
+</ParamField>
+
+<ParamField path="y" type="ndarray" required>
+  Target labels.
+</ParamField>
+
+<ParamField path="epsilon" type="float" default="1e-5">
+  Small value for numerical gradient approximation.
+</ParamField>
+
+<ParamField path="num_checks" type="int" default="10">
+  Number of random parameters to check.
+</ParamField>
+
+**Returns:** `dict` - Maximum gradient errors for each parameter.
+
+### Properties
+
+<ParamField path="weights" type="list[ndarray]">
+  List of weight matrices for all layers.
+</ParamField>
+
+<ParamField path="biases" type="list[ndarray]">
+  List of bias vectors for all layers.
+</ParamField>
+
+### Usage Example
+
+```python
+import numpy as np
+from model import NeuralNetworkModel
+
+# Create a 3-layer network: 784 -> 128 -> 64 -> 10
+model = NeuralNetworkModel(
+    layer_sizes=[784, 128, 64, 10],
+    activations=['relu', 'relu', 'softmax'],
+    l2_lambda=0.01,
+    dropout_rate=0.2
+)
+
+# Train the model
+history = model.fit(
+    X_train, y_train,
+    epochs=50,
+    alpha=0.001,
+    batch_size=64,
+    X_val=X_val,
+    y_val=y_val,
+    patience=10
+)
+
+# Make predictions
+predictions = model.predict(X_test)
+
+# Save trained weights
+model.save_weights('model_weights.npz')
+```
+
+---
+
+## NeuralNetwork
+
+A convenience class that inherits from `NeuralNetworkModel` with identical functionality. Defined in `student.py`.
+
+### Constructor
+
+```python
+NeuralNetwork(layer_sizes, activations, l2_lambda=0.0, dropout_rate=0.0, precision_config=DEFAULT_CONFIG)
+```
+
+Parameters and methods are identical to `NeuralNetworkModel`.
+
+### Usage Example
+
+```python
+from student import NeuralNetwork
+
+# Create and train a network
+nn = NeuralNetwork(
+    layer_sizes=[784, 128, 10],
+    activations=['relu', 'softmax']
+)
+
+history = nn.fit(X_train, y_train, epochs=20, alpha=0.01)
+```
